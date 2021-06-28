@@ -34,6 +34,9 @@
 #include <linux/if_vlan.h>
 #include <net/geneve.h>
 #include <net/dsfield.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 #include "en.h"
 #include "en/txrx.h"
 #include "ipoib/ipoib.h"
@@ -385,6 +388,10 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	struct mlx5_wq_cyc *wq = &sq->wq;
 	bool send_doorbell;
 
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+#endif
+
 	*wi = (struct mlx5e_tx_wqe_info) {
 		.skb = skb,
 		.num_bytes = attr->num_bytes,
@@ -405,6 +412,13 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	send_doorbell = __netdev_tx_sent_queue(sq->txq, attr->num_bytes, xmit_more);
 	if (send_doorbell)
 		mlx5e_notify_hw(wq, sq->pc, sq->uar_map, cseg);
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (sysctl_net_latency_breakdown_on && shinfo->port) {
+		shinfo->tx_ts.xmit_finish = ktime_get_real();
+		latency_breakdown_print_log(shinfo->port, shinfo->rx_ts, shinfo->tx_ts);
+	}
+#endif
 }
 
 static void
@@ -634,6 +648,13 @@ netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct mlx5e_tx_wqe *wqe;
 	struct mlx5e_txqsq *sq;
 	u16 pi;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+	if (sysctl_net_latency_breakdown_on && shinfo->port) {
+		shinfo->tx_ts.xmit = ktime_get_real();
+	}
+#endif
 
 	sq = priv->txq2sq[skb_get_queue_mapping(skb)];
 

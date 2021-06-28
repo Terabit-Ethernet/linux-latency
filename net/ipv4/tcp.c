@@ -279,6 +279,9 @@
 #include <linux/uaccess.h>
 #include <asm/ioctls.h>
 #include <net/busy_poll.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 struct percpu_counter tcp_orphan_count;
 EXPORT_SYMBOL_GPL(tcp_orphan_count);
@@ -455,7 +458,11 @@ void tcp_init_sock(struct sock *sk)
 	WRITE_ONCE(sk->sk_rcvbuf, sock_net(sk)->ipv4.sysctl_tcp_rmem[1]);
 
 	sk_sockets_allocated_inc(sk);
+
+/* Don't force enable GSO */
+#if !(IS_ENABLED(CONFIG_NET_LATENCY))
 	sk->sk_route_forced_caps = NETIF_F_GSO;
+#endif
 }
 EXPORT_SYMBOL(tcp_init_sock);
 
@@ -1198,6 +1205,11 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 	bool zc = false;
 	long timeo;
 
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	unsigned long lflags;
+	struct skb_shared_info* shinfo;
+#endif
+
 	flags = msg->msg_flags;
 
 	if (flags & MSG_ZEROCOPY && size && sock_flag(sk, SOCK_ZEROCOPY)) {
@@ -1315,6 +1327,24 @@ new_segment:
 		if (copy > msg_data_left(msg))
 			copy = msg_data_left(msg);
 
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+		shinfo = skb_shinfo(skb);
+		if (sysctl_net_latency_breakdown_on) {
+			spin_lock_irqsave(&sk->sk_ts_lock, lflags);
+			if (sk->sk_rcv_skb_ts && sk->sk_log_index++ % sysctl_net_latency_breakdown_on == 0) {
+				sk->sk_rcv_skb_ts->read_enter = sk->sk_ts->read_enter;
+				sk->sk_rcv_skb_ts->read_return = sk->sk_ts->read_return;
+				sk->sk_rcv_skb_ts->sleep_enter = sk->sk_ts->sleep_enter;
+				sk->sk_rcv_skb_ts->wake_up = sk->sk_ts->wake_up;
+				sk->sk_rcv_skb_ts->ready = sk->sk_ts->ready;
+				shinfo->port = be16_to_cpu(sk->sk_dport);
+				shinfo->tx_ts.write_enter = sk->sk_ts->write_enter;
+				latency_breakdown_copy_rx_timestamps(&shinfo->rx_ts, sk->sk_rcv_skb_ts);
+			}
+			spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+		}
+#endif
+
 		/* Where to copy to? */
 		if (skb_availroom(skb) > 0 && !zc) {
 			/* We have some space in skb head. Superb! */
@@ -1343,6 +1373,12 @@ new_segment:
 
 			if (!sk_wmem_schedule(sk, copy))
 				goto wait_for_space;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+			if (sysctl_net_latency_breakdown_on && shinfo->port) {
+				shinfo->tx_ts.data_copy = ktime_get_real();
+			}
+#endif
 
 			err = skb_copy_to_page_nocache(sk, &msg->msg_iter, skb,
 						       pfrag->page,
@@ -1439,6 +1475,17 @@ EXPORT_SYMBOL_GPL(tcp_sendmsg_locked);
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 {
 	int ret;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	unsigned long flags;
+	if (sysctl_net_latency_breakdown_on) {
+		spin_lock_irqsave(&sk->sk_ts_lock, flags);
+		if (sk->sk_rcv_skb_ts) {
+			sk->sk_ts->write_enter = ktime_get_real();
+		}
+		spin_unlock_irqrestore(&sk->sk_ts_lock, flags);
+	}
+#endif
 
 	lock_sock(sk);
 	ret = tcp_sendmsg_locked(sk, msg, size);
@@ -2029,6 +2076,19 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	struct scm_timestamping_internal tss;
 	int cmsg_flags;
 
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	unsigned long lflags;
+	struct skb_shared_info *shinfo;
+
+	if (sysctl_net_latency_breakdown_on) {
+		spin_lock_irqsave(&sk->sk_ts_lock, lflags);
+		if (sk->sk_rcv_skb_ts) {
+			sk->sk_ts->read_enter = ktime_get_real();
+		}
+		spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+	}
+#endif
+
 	if (unlikely(flags & MSG_ERRQUEUE))
 		return inet_recv_error(sk, msg, len, addr_len);
 
@@ -2163,7 +2223,27 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 			release_sock(sk);
 			lock_sock(sk);
 		} else {
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+			if (sysctl_net_latency_breakdown_on) {
+				spin_lock_irqsave(&sk->sk_ts_lock, lflags);
+				if (sk->sk_rcv_skb_ts) {
+					sk->sk_ts->sleep_enter = ktime_get_real();
+				}
+				spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+			}
+#endif
+
 			sk_wait_data(sk, &timeo, last);
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+			if (sysctl_net_latency_breakdown_on) {
+				spin_lock_irqsave(&sk->sk_ts_lock, lflags);
+				if (sk->sk_rcv_skb_ts) {
+					sk->sk_ts->wake_up = ktime_get_real();
+				}
+				spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+			}
+#endif
 		}
 
 		if ((flags & MSG_PEEK) &&
@@ -2200,6 +2280,13 @@ found_ok_skb:
 		}
 
 		if (!(flags & MSG_TRUNC)) {
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+			shinfo = skb_shinfo(skb);
+			if (sysctl_net_latency_breakdown_on) {
+				shinfo->rx_ts.data_copy = ktime_get_real();
+			}
+#endif
+
 			err = skb_copy_datagram_msg(skb, offset, msg, used);
 			if (err) {
 				/* Exception. Bailout! */
@@ -2212,6 +2299,16 @@ found_ok_skb:
 		WRITE_ONCE(*seq, *seq + used);
 		copied += used;
 		len -= used;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+		if (sysctl_net_latency_breakdown_on) {
+			spin_lock_irqsave(&sk->sk_ts_lock, lflags);
+			if (sk->sk_rcv_skb_ts) {
+				latency_breakdown_copy_rx_timestamps(sk->sk_rcv_skb_ts, &shinfo->rx_ts);
+			}
+			spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+		}
+#endif
 
 		tcp_rcv_space_adjust(sk);
 
@@ -2260,6 +2357,16 @@ found_fin_ok:
 			put_cmsg(msg, SOL_TCP, TCP_CM_INQ, sizeof(inq), &inq);
 		}
 	}
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (sysctl_net_latency_breakdown_on) {
+		spin_lock_irqsave(&sk->sk_ts_lock, lflags);
+		if (sk->sk_rcv_skb_ts) {
+			sk->sk_ts->read_return = ktime_get_real();
+		}
+		spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+	}
+#endif
 
 	return copied;
 

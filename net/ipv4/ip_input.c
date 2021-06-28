@@ -141,6 +141,9 @@
 #include <linux/mroute.h>
 #include <linux/netlink.h>
 #include <net/dst_metadata.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 /*
  *	Process Router Attention IP option (RFC 2113)
@@ -436,6 +439,13 @@ static struct sk_buff *ip_rcv_core(struct sk_buff *skb, struct net *net)
 {
 	const struct iphdr *iph;
 	u32 len;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+	if (sysctl_net_latency_breakdown_on) {
+		shinfo->rx_ts.ip = ktime_get_real();
+	}
+#endif
 
 	/* When the interface is in promisc. mode, drop all the crap
 	 * that it receives, do not try to analyse it.

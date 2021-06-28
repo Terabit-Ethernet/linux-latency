@@ -80,6 +80,9 @@
 #include <linux/jump_label_ratelimit.h>
 #include <net/busy_poll.h>
 #include <net/mptcp.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 int sysctl_tcp_max_orphans __read_mostly = NR_FILE;
 
@@ -4910,10 +4913,24 @@ void tcp_data_ready(struct sock *sk)
 	const struct tcp_sock *tp = tcp_sk(sk);
 	int avail = tp->rcv_nxt - tp->copied_seq;
 
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	unsigned long flags;
+#endif
+
 	if (avail < sk->sk_rcvlowat && !tcp_rmem_pressure(sk) &&
 	    !sock_flag(sk, SOCK_DONE) &&
 	    tcp_receive_window(tp) > inet_csk(sk)->icsk_ack.rcv_mss)
 		return;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (sysctl_net_latency_breakdown_on) {
+		spin_lock_irqsave(&sk->sk_ts_lock, flags);
+		if (sk->sk_rcv_skb_ts) {
+			sk->sk_ts->ready = ktime_get_real();
+		}
+		spin_unlock_irqrestore(&sk->sk_ts_lock, flags);
+	}
+#endif
 
 	sk->sk_data_ready(sk);
 }
@@ -5708,6 +5725,13 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 	const struct tcphdr *th = (const struct tcphdr *)skb->data;
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int len = skb->len;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+	if (sysctl_net_latency_breakdown_on) {
+		shinfo->rx_ts.tcp = ktime_get_real();
+	}
+#endif
 
 	/* TCP congestion window tracking */
 	trace_tcp_probe(sk, skb);

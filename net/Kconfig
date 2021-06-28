@@ -472,3 +472,13 @@ config HAVE_CBPF_JIT
 # Extended BPF JIT (eBPF)
 config HAVE_EBPF_JIT
 	bool
+
+config NET_LATENCY
+	bool "Measure network IO latency at each layer of the stack"
+	default y
+	help
+	  This enables code that marks timestamp of every skb at each
+	  layer in the network stack. These timestamps can then be printed
+	  at a configurable granularity to obtain a distribution of latency
+	  overhead of each layer. This might introduce some performance
+	  pernalties.

@@ -46,6 +46,9 @@
 #include <linux/static_key.h>
 
 #include <trace/events/tcp.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 /* Refresh clocks of a TCP socket,
  * ensuring monotically increasing values.
@@ -2618,6 +2621,13 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 	max_segs = tcp_tso_segs(sk, mss_now);
 	while ((skb = tcp_send_head(sk))) {
 		unsigned int limit;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+		struct skb_shared_info *shinfo = skb_shinfo(skb);
+		if (sysctl_net_latency_breakdown_on && shinfo->port) {
+			shinfo->tx_ts.tcp = ktime_get_real();
+		}
+#endif
 
 		if (unlikely(tp->repair) && tp->repair_queue == TCP_SEND_QUEUE) {
 			/* "skb_mstamp_ns" is used as a start point for the retransmit timer */

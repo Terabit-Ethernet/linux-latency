@@ -82,6 +82,9 @@
 #include <linux/netfilter_bridge.h>
 #include <linux/netlink.h>
 #include <linux/tcp.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 static int
 ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
@@ -460,6 +463,13 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	struct rtable *rt;
 	struct iphdr *iph;
 	int res;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+	if (sysctl_net_latency_breakdown_on && shinfo->port) {
+		shinfo->tx_ts.ip = ktime_get_real();
+	}
+#endif
 
 	/* Skip all of this if the packet is already routed,
 	 * f.e. by something like SCTP.

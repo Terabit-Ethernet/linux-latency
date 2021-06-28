@@ -21,6 +21,9 @@
 #include <net/net_ratelimit.h>
 #include <net/busy_poll.h>
 #include <net/pkt_sched.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 static int two = 2;
 static int three = 3;
@@ -572,6 +575,24 @@ static struct ctl_table net_core_table[] = {
 		.proc_handler	= proc_dointvec_minmax,
 		.extra1		= SYSCTL_ONE,
 	},
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	{
+		.procname       = "latency_breakdown_on",
+		.data           = &sysctl_net_latency_breakdown_on,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_douintvec,
+	},
+	{
+		.procname       = "latency_breakdown_log",
+		.data           = &sysctl_net_latency_breakdown_log,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_douintvec_minmax,
+		.extra1         = &sysctl_net_latency_breakdown_log_min,
+		.extra2         = &sysctl_net_latency_breakdown_log_max,
+	},
+#endif
 	{ }
 };
 

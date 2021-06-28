@@ -31,6 +31,10 @@
  */
 
 #include <linux/irq.h>
+#include <linux/kconfig.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 #include "en.h"
 #include "en/txrx.h"
 #include "en/xdp.h"
@@ -128,6 +132,12 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 	bool xsk_open;
 	int i;
 
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (sysctl_net_latency_breakdown_on) {
+		this_cpu_write(latency_breakdown_napi_ts, ktime_get_real());
+	}
+#endif
+
 	rcu_read_lock();
 
 	xsk_open = test_bit(MLX5E_CHANNEL_STATE_XSK, c->state);
@@ -218,6 +228,12 @@ out:
 void mlx5e_completion_event(struct mlx5_core_cq *mcq, struct mlx5_eqe *eqe)
 {
 	struct mlx5e_cq *cq = container_of(mcq, struct mlx5e_cq, mcq);
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (sysctl_net_latency_breakdown_on) {
+		this_cpu_write(latency_breakdown_irq_ts, ktime_get_real());
+	}
+#endif
 
 	napi_schedule(cq->napi);
 	cq->event_ctr++;

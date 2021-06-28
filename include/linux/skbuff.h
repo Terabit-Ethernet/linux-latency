@@ -40,6 +40,9 @@
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
 #include <linux/netfilter/nf_conntrack_common.h>
 #endif
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 /* The interface for checksum offload between the stack and networking drivers
  * is as follows...
@@ -521,6 +524,16 @@ struct skb_shared_info {
 	struct skb_shared_hwtstamps hwtstamps;
 	unsigned int	gso_type;
 	u32		tskey;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	/* Each skb stores the Tx/Rx layer timestamps
+	 * of the request it was a part of and the TCP
+	 * port.
+	 */
+	unsigned int		port;
+	struct rx_timestamps_t	rx_ts;
+	struct tx_timestamps_t	tx_ts;
+#endif
 
 	/*
 	 * Warning : all fields before dataref are cleared in __alloc_skb()

@@ -146,6 +146,9 @@
 #include <net/devlink.h>
 #include <linux/pm_runtime.h>
 #include <linux/prandom.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 #include "net-sysfs.h"
 
@@ -4082,6 +4085,13 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	struct Qdisc *q;
 	int rc = -ENOMEM;
 	bool again = false;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	struct skb_shared_info *shinfo = skb_shinfo(skb);
+	if (sysctl_net_latency_breakdown_on && shinfo->port) {
+		shinfo->tx_ts.queue_xmit = ktime_get_real();
+	}
+#endif
 
 	skb_reset_mac_header(skb);
 

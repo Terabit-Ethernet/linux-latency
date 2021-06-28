@@ -76,6 +76,9 @@
 #include <linux/capability.h>
 #include <linux/user_namespace.h>
 #include <linux/indirect_call_wrapper.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 #include "datagram.h"
 
@@ -249,6 +252,11 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 
 		fclones->skb2.fclone = SKB_FCLONE_CLONE;
 	}
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	shinfo->rx_ts.alloc = shinfo->tx_ts.alloc = ktime_get_real();
+#endif
+
 out:
 	return skb;
 nodata:

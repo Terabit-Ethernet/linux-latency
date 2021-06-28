@@ -68,6 +68,9 @@
 #include <net/tcp_states.h>
 #include <linux/net_tstamp.h>
 #include <net/l3mdev.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 /*
  * This structure really needs to be cleaned up.
@@ -236,6 +239,14 @@ struct sock_common {
 	};
 
 	refcount_t		skc_refcnt;
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	spinlock_t			sk_ts_lock;
+	unsigned int			sk_log_index;
+	struct rx_timestamps_t		*sk_rcv_skb_ts;
+	struct sock_timestamps_t	*sk_ts;
+#endif
+
 	/* private: */
 	int                     skc_dontcopy_end[0];
 	union {
@@ -383,6 +394,13 @@ struct sock {
 #define sk_incoming_cpu		__sk_common.skc_incoming_cpu
 #define sk_flags		__sk_common.skc_flags
 #define sk_rxhash		__sk_common.skc_rxhash
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#define sk_ts_lock		__sk_common.sk_ts_lock
+#define sk_log_index		__sk_common.sk_log_index
+#define sk_rcv_skb_ts		__sk_common.sk_rcv_skb_ts
+#define sk_ts			__sk_common.sk_ts
+#endif
 
 	socket_lock_t		sk_lock;
 	atomic_t		sk_drops;
