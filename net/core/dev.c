@@ -4087,9 +4087,8 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	bool again = false;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	struct skb_shared_info *shinfo = skb_shinfo(skb);
-	if (sysctl_net_latency_breakdown_on && shinfo->port) {
-		shinfo->tx_ts.queue_xmit = ktime_get_real();
+	if (sysctl_net_latency_breakdown_on && skb->port) {
+		skb->tx_ts.queue_xmit = ktime_get_real();
 	}
 #endif
 

@@ -1238,10 +1238,6 @@ static void mlx5e_handle_rx_cqe(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 	u32 cqe_bcnt;
 	u16 ci;
 
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	struct skb_shared_info *shinfo;
-#endif
-
 	ci       = mlx5_wq_cyc_ctr2ix(wq, be16_to_cpu(cqe->wqe_counter));
 	wi       = get_frag(rq, ci);
 	cqe_bcnt = be32_to_cpu(cqe->byte_cnt);
@@ -1276,12 +1272,11 @@ static void mlx5e_handle_rx_cqe(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 		}
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	shinfo = skb_shinfo(skb);
 	if (sysctl_net_latency_breakdown_on) {
-		shinfo->rx_ts.irq = this_cpu_read(latency_breakdown_irq_ts);
-		shinfo->rx_ts.napi = this_cpu_read(latency_breakdown_napi_ts);
-		shinfo->rx_ts.hw = shinfo->hwtstamps.hwtstamp;
-		shinfo->rx_ts.gro = ktime_get_real();
+		skb->rx_ts.irq = this_cpu_read(latency_breakdown_irq_ts);
+		skb->rx_ts.napi = this_cpu_read(latency_breakdown_napi_ts);
+		skb->rx_ts.hw = skb_shinfo(skb)->hwtstamps.hwtstamp;
+		skb->rx_ts.gro = ktime_get_real();
 	}
 #endif
 
@@ -1524,10 +1519,6 @@ static void mlx5e_handle_rx_cqe_mpwrq(struct mlx5e_rq *rq, struct mlx5_cqe64 *cq
 	struct sk_buff *skb;
 	u16 cqe_bcnt;
 
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	struct skb_shared_info *shinfo;
-#endif
-
 	wi->consumed_strides += cstrides;
 
 	if (unlikely(MLX5E_RX_ERR_CQE(cqe))) {
@@ -1562,12 +1553,11 @@ static void mlx5e_handle_rx_cqe_mpwrq(struct mlx5e_rq *rq, struct mlx5_cqe64 *cq
 		}
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	shinfo = skb_shinfo(skb);
 	if (sysctl_net_latency_breakdown_on) {
-		shinfo->rx_ts.irq = this_cpu_read(latency_breakdown_irq_ts);
-		shinfo->rx_ts.napi = this_cpu_read(latency_breakdown_napi_ts);
-		shinfo->rx_ts.hw = shinfo->hwtstamps.hwtstamp;
-		shinfo->rx_ts.gro = ktime_get_real();
+		skb->rx_ts.irq = this_cpu_read(latency_breakdown_irq_ts);
+		skb->rx_ts.napi = this_cpu_read(latency_breakdown_napi_ts);
+		skb->rx_ts.hw = skb_shinfo(skb)->hwtstamps.hwtstamp;
+		skb->rx_ts.gro = ktime_get_real();
 	}
 #endif
 

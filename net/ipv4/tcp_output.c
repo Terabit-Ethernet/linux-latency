@@ -2623,9 +2623,8 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		unsigned int limit;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-		struct skb_shared_info *shinfo = skb_shinfo(skb);
-		if (sysctl_net_latency_breakdown_on && shinfo->port) {
-			shinfo->tx_ts.tcp = ktime_get_real();
+		if (sysctl_net_latency_breakdown_on && skb->port) {
+			skb->tx_ts.tcp = ktime_get_real();
 		}
 #endif
 

@@ -254,7 +254,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	}
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	shinfo->rx_ts.alloc = shinfo->tx_ts.alloc = ktime_get_real();
+	skb->rx_ts.alloc = skb->tx_ts.alloc = ktime_get_real();
 #endif
 
 out:
@@ -983,6 +983,11 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	CHECK_SKB_FIELD(tc_index);
 #endif
 
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	new->port = old->port;
+	new->rx_ts = old->rx_ts;
+	new->tx_ts = old->tx_ts;
+#endif
 }
 
 /*

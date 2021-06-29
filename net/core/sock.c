@@ -138,6 +138,9 @@
 
 #include <net/tcp.h>
 #include <net/busy_poll.h>
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#include <net/latency.h>
+#endif
 
 static DEFINE_MUTEX(proto_list_mutex);
 static LIST_HEAD(proto_list);
@@ -1649,8 +1652,8 @@ static void sock_copy(struct sock *nsk, const struct sock *osk)
 	memcpy(nsk, osk, offsetof(struct sock, sk_dontcopy_begin));
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	*nsk->sk_rcv_skb_ts = *osk->sk_rcv_skb_ts;
-	*nsk->sk_ts = *osk->sk_ts;
+	nsk->sk_rcv_skb_ts = osk->sk_rcv_skb_ts;
+	nsk->sk_ts = osk->sk_ts;
 	nsk->sk_log_index = osk->sk_log_index;
 #endif
 
@@ -1668,10 +1671,6 @@ static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 {
 	struct sock *sk;
 	struct kmem_cache *slab;
-
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	void *ts_alloc;
-#endif
 
 	slab = prot->slab;
 	if (slab != NULL) {
@@ -1692,16 +1691,6 @@ static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 		sk_tx_queue_clear(sk);
 	}
 
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	spin_lock_init(&sk->sk_ts_lock);
-	sk->sk_log_index = 0;
-	ts_alloc = kzalloc(sizeof(struct rx_timestamps_t) + sizeof(struct sock_timestamps_t), priority);
-	if (ts_alloc) {
-		sk->sk_rcv_skb_ts = ts_alloc;
-		sk->sk_ts = ts_alloc + sizeof(struct rx_timestamps_t);
-	}
-#endif
-
 	return sk;
 
 out_free_sec:
@@ -1718,17 +1707,6 @@ static void sk_prot_free(struct proto *prot, struct sock *sk)
 {
 	struct kmem_cache *slab;
 	struct module *owner;
-
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	unsigned long flags;
-	spin_lock_irqsave(&sk->sk_ts_lock, flags);
-	if (sk->sk_rcv_skb_ts) {
-		kfree(sk->sk_rcv_skb_ts);
-		sk->sk_rcv_skb_ts = NULL;
-		sk->sk_ts = NULL;
-	}
-	spin_unlock_irqrestore(&sk->sk_ts_lock, flags);
-#endif
 
 	owner = prot->owner;
 	slab = prot->slab;

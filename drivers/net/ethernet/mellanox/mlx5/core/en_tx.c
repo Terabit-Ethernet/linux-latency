@@ -388,10 +388,6 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	struct mlx5_wq_cyc *wq = &sq->wq;
 	bool send_doorbell;
 
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	struct skb_shared_info *shinfo = skb_shinfo(skb);
-#endif
-
 	*wi = (struct mlx5e_tx_wqe_info) {
 		.skb = skb,
 		.num_bytes = attr->num_bytes,
@@ -414,9 +410,9 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		mlx5e_notify_hw(wq, sq->pc, sq->uar_map, cseg);
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	if (sysctl_net_latency_breakdown_on && shinfo->port) {
-		shinfo->tx_ts.xmit_finish = ktime_get_real();
-		latency_breakdown_print_log(shinfo->port, shinfo->rx_ts, shinfo->tx_ts);
+	if (sysctl_net_latency_breakdown_on && skb->port) {
+		skb->tx_ts.xmit_finish = ktime_get_real();
+		latency_breakdown_print_log(skb->port, skb->rx_ts, skb->tx_ts);
 	}
 #endif
 }
@@ -650,9 +646,8 @@ netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev)
 	u16 pi;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	struct skb_shared_info *shinfo = skb_shinfo(skb);
-	if (sysctl_net_latency_breakdown_on && shinfo->port) {
-		shinfo->tx_ts.xmit = ktime_get_real();
+	if (sysctl_net_latency_breakdown_on && skb->port) {
+		skb->tx_ts.xmit = ktime_get_real();
 	}
 #endif
 

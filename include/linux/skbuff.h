@@ -525,16 +525,6 @@ struct skb_shared_info {
 	unsigned int	gso_type;
 	u32		tskey;
 
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	/* Each skb stores the Tx/Rx layer timestamps
-	 * of the request it was a part of and the TCP
-	 * port.
-	 */
-	unsigned int		port;
-	struct rx_timestamps_t	rx_ts;
-	struct tx_timestamps_t	tx_ts;
-#endif
-
 	/*
 	 * Warning : all fields before dataref are cleared in __alloc_skb()
 	 */
@@ -919,6 +909,17 @@ struct sk_buff {
 
 	/* private: */
 	__u32			headers_end[0];
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	/* Each skb stores the Tx/Rx layer timestamps
+	 * of the request it was a part of and the TCP
+	 * port.
+	 */
+	unsigned int		port;
+	struct rx_timestamps_t	rx_ts;
+	struct tx_timestamps_t	tx_ts;
+#endif
+
 	/* public: */
 
 	/* These elements must be at the end, see alloc_skb() for details.  */

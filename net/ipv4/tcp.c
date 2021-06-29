@@ -1205,11 +1205,6 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 	bool zc = false;
 	long timeo;
 
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	unsigned long lflags;
-	struct skb_shared_info* shinfo;
-#endif
-
 	flags = msg->msg_flags;
 
 	if (flags & MSG_ZEROCOPY && size && sock_flag(sk, SOCK_ZEROCOPY)) {
@@ -1328,20 +1323,17 @@ new_segment:
 			copy = msg_data_left(msg);
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-		shinfo = skb_shinfo(skb);
 		if (sysctl_net_latency_breakdown_on) {
-			spin_lock_irqsave(&sk->sk_ts_lock, lflags);
-			if (sk->sk_rcv_skb_ts && sk->sk_log_index++ % sysctl_net_latency_breakdown_on == 0) {
-				sk->sk_rcv_skb_ts->read_enter = sk->sk_ts->read_enter;
-				sk->sk_rcv_skb_ts->read_return = sk->sk_ts->read_return;
-				sk->sk_rcv_skb_ts->sleep_enter = sk->sk_ts->sleep_enter;
-				sk->sk_rcv_skb_ts->wake_up = sk->sk_ts->wake_up;
-				sk->sk_rcv_skb_ts->ready = sk->sk_ts->ready;
-				shinfo->port = be16_to_cpu(sk->sk_dport);
-				shinfo->tx_ts.write_enter = sk->sk_ts->write_enter;
-				latency_breakdown_copy_rx_timestamps(&shinfo->rx_ts, sk->sk_rcv_skb_ts);
+			if (sk->sk_log_index++ % sysctl_net_latency_breakdown_on == 0) {
+				sk->sk_rcv_skb_ts.read_enter = sk->sk_ts.read_enter;
+				sk->sk_rcv_skb_ts.read_return = sk->sk_ts.read_return;
+				sk->sk_rcv_skb_ts.sleep_enter = sk->sk_ts.sleep_enter;
+				sk->sk_rcv_skb_ts.wake_up = sk->sk_ts.wake_up;
+				sk->sk_rcv_skb_ts.ready = sk->sk_ts.ready;
+				skb->port = be16_to_cpu(sk->sk_dport);
+				skb->tx_ts.write_enter = sk->sk_ts.write_enter;
+				skb->rx_ts = sk->sk_rcv_skb_ts;
 			}
-			spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
 		}
 #endif
 
@@ -1375,8 +1367,8 @@ new_segment:
 				goto wait_for_space;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-			if (sysctl_net_latency_breakdown_on && shinfo->port) {
-				shinfo->tx_ts.data_copy = ktime_get_real();
+			if (sysctl_net_latency_breakdown_on && skb->port) {
+				skb->tx_ts.data_copy = ktime_get_real();
 			}
 #endif
 
@@ -1477,13 +1469,8 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 	int ret;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	unsigned long flags;
 	if (sysctl_net_latency_breakdown_on) {
-		spin_lock_irqsave(&sk->sk_ts_lock, flags);
-		if (sk->sk_rcv_skb_ts) {
-			sk->sk_ts->write_enter = ktime_get_real();
-		}
-		spin_unlock_irqrestore(&sk->sk_ts_lock, flags);
+		sk->sk_ts.write_enter = ktime_get_real();
 	}
 #endif
 
@@ -2077,15 +2064,8 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	int cmsg_flags;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	unsigned long lflags;
-	struct skb_shared_info *shinfo;
-
 	if (sysctl_net_latency_breakdown_on) {
-		spin_lock_irqsave(&sk->sk_ts_lock, lflags);
-		if (sk->sk_rcv_skb_ts) {
-			sk->sk_ts->read_enter = ktime_get_real();
-		}
-		spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+		sk->sk_ts.read_enter = ktime_get_real();
 	}
 #endif
 
@@ -2225,11 +2205,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		} else {
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
-				spin_lock_irqsave(&sk->sk_ts_lock, lflags);
-				if (sk->sk_rcv_skb_ts) {
-					sk->sk_ts->sleep_enter = ktime_get_real();
-				}
-				spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+				sk->sk_ts.sleep_enter = ktime_get_real();
 			}
 #endif
 
@@ -2237,11 +2213,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
-				spin_lock_irqsave(&sk->sk_ts_lock, lflags);
-				if (sk->sk_rcv_skb_ts) {
-					sk->sk_ts->wake_up = ktime_get_real();
-				}
-				spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+				sk->sk_ts.wake_up = ktime_get_real();
 			}
 #endif
 		}
@@ -2281,9 +2253,8 @@ found_ok_skb:
 
 		if (!(flags & MSG_TRUNC)) {
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-			shinfo = skb_shinfo(skb);
 			if (sysctl_net_latency_breakdown_on) {
-				shinfo->rx_ts.data_copy = ktime_get_real();
+				skb->rx_ts.data_copy = ktime_get_real();
 			}
 #endif
 
@@ -2302,11 +2273,7 @@ found_ok_skb:
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		if (sysctl_net_latency_breakdown_on) {
-			spin_lock_irqsave(&sk->sk_ts_lock, lflags);
-			if (sk->sk_rcv_skb_ts) {
-				latency_breakdown_copy_rx_timestamps(sk->sk_rcv_skb_ts, &shinfo->rx_ts);
-			}
-			spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+			sk->sk_rcv_skb_ts = skb->rx_ts;
 		}
 #endif
 
@@ -2360,11 +2327,7 @@ found_fin_ok:
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
-		spin_lock_irqsave(&sk->sk_ts_lock, lflags);
-		if (sk->sk_rcv_skb_ts) {
-			sk->sk_ts->read_return = ktime_get_real();
-		}
-		spin_unlock_irqrestore(&sk->sk_ts_lock, lflags);
+		sk->sk_ts.read_return = ktime_get_real();
 	}
 #endif
 

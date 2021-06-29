@@ -441,9 +441,8 @@ static struct sk_buff *ip_rcv_core(struct sk_buff *skb, struct net *net)
 	u32 len;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	struct skb_shared_info *shinfo = skb_shinfo(skb);
 	if (sysctl_net_latency_breakdown_on) {
-		shinfo->rx_ts.ip = ktime_get_real();
+		skb->rx_ts.ip = ktime_get_real();
 	}
 #endif
 

@@ -465,9 +465,8 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	int res;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	struct skb_shared_info *shinfo = skb_shinfo(skb);
-	if (sysctl_net_latency_breakdown_on && shinfo->port) {
-		shinfo->tx_ts.ip = ktime_get_real();
+	if (sysctl_net_latency_breakdown_on && skb->port) {
+		skb->tx_ts.ip = ktime_get_real();
 	}
 #endif
 
