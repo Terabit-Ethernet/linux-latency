@@ -76,9 +76,6 @@
 #include <linux/capability.h>
 #include <linux/user_namespace.h>
 #include <linux/indirect_call_wrapper.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 
 #include "datagram.h"
 
@@ -983,11 +980,6 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 	CHECK_SKB_FIELD(tc_index);
 #endif
 
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	new->port = old->port;
-	new->rx_ts = old->rx_ts;
-	new->tx_ts = old->tx_ts;
-#endif
 }
 
 /*

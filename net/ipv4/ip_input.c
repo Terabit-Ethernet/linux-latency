@@ -141,9 +141,6 @@
 #include <linux/mroute.h>
 #include <linux/netlink.h>
 #include <net/dst_metadata.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 
 /*
  *	Process Router Attention IP option (RFC 2113)

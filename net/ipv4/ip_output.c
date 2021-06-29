@@ -82,9 +82,6 @@
 #include <linux/netfilter_bridge.h>
 #include <linux/netlink.h>
 #include <linux/tcp.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 
 static int
 ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,

@@ -34,9 +34,6 @@
 #include <linux/if_vlan.h>
 #include <net/geneve.h>
 #include <net/dsfield.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 #include "en.h"
 #include "en/txrx.h"
 #include "ipoib/ipoib.h"

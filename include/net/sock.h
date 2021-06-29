@@ -68,9 +68,6 @@
 #include <net/tcp_states.h>
 #include <linux/net_tstamp.h>
 #include <net/l3mdev.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 
 /*
  * This structure really needs to be cleaned up.
@@ -217,6 +214,13 @@ struct sock_common {
 		struct sock	*skc_listener; /* request_sock */
 		struct inet_timewait_death_row *skc_tw_dr; /* inet_timewait_sock */
 	};
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	unsigned int			sk_log_index;
+	struct rx_timestamps_t		sk_rcv_skb_ts;
+	struct sock_timestamps_t	sk_ts;
+#endif
+
 	/*
 	 * fields between dontcopy_begin/dontcopy_end
 	 * are not copied in sock_copy()
@@ -239,13 +243,6 @@ struct sock_common {
 	};
 
 	refcount_t		skc_refcnt;
-
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	unsigned int			sk_log_index;
-	struct rx_timestamps_t		sk_rcv_skb_ts;
-	struct sock_timestamps_t	sk_ts;
-#endif
-
 	/* private: */
 	int                     skc_dontcopy_end[0];
 	union {

@@ -742,3 +742,10 @@ config TCP_MD5SIG
 	  on the Internet.
 
 	  If unsure, say N.
+
+config TCP_FORCE_GSO
+	bool "Force enable GSO for all TCP connections"
+	default N
+	help
+	  This option forced GSO to be enabled for all TCP
+	  connections regardless of ethtool config.

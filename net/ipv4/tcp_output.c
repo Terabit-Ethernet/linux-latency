@@ -46,9 +46,6 @@
 #include <linux/static_key.h>
 
 #include <trace/events/tcp.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 
 /* Refresh clocks of a TCP socket,
  * ensuring monotically increasing values.

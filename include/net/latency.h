@@ -76,11 +76,6 @@ struct sock_timestamps_t {
 	ktime_t	wake_up;
 };
 
-/* Copy skb Rx timestamps. */
-static inline void latency_breakdown_copy_rx_timestamps(struct rx_timestamps_t *dst, struct rx_timestamps_t *src) {
-	memcpy(dst, src, sizeof(struct rx_timestamps_t));
-}
-
 /* Prints the log of the latency breakdown for a given skb. */
 static inline void latency_breakdown_print_log(unsigned int port, struct rx_timestamps_t rx_ts, struct tx_timestamps_t tx_ts) {
 	trace_printk(

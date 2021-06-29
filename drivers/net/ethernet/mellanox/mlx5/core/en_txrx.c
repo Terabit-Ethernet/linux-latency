@@ -31,10 +31,6 @@
  */
 
 #include <linux/irq.h>
-#include <linux/kconfig.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 #include "en.h"
 #include "en/txrx.h"
 #include "en/xdp.h"

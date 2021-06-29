@@ -279,9 +279,6 @@
 #include <linux/uaccess.h>
 #include <asm/ioctls.h>
 #include <net/busy_poll.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 
 struct percpu_counter tcp_orphan_count;
 EXPORT_SYMBOL_GPL(tcp_orphan_count);
@@ -459,8 +456,7 @@ void tcp_init_sock(struct sock *sk)
 
 	sk_sockets_allocated_inc(sk);
 
-/* Don't force enable GSO */
-#if !(IS_ENABLED(CONFIG_NET_LATENCY))
+#if IS_ENABLED(CONFIG_TCP_FORCE_GSO)
 	sk->sk_route_forced_caps = NETIF_F_GSO;
 #endif
 }

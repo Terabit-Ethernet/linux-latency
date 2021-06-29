@@ -36,10 +36,6 @@
 #include <net/ip6_checksum.h>
 #include <net/page_pool.h>
 #include <net/inet_ecn.h>
-#include <linux/kconfig.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 #include "en.h"
 #include "en/txrx.h"
 #include "en_tc.h"

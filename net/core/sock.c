@@ -138,9 +138,6 @@
 
 #include <net/tcp.h>
 #include <net/busy_poll.h>
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-#include <net/latency.h>
-#endif
 
 static DEFINE_MUTEX(proto_list_mutex);
 static LIST_HEAD(proto_list);
@@ -1650,12 +1647,6 @@ static void sock_copy(struct sock *nsk, const struct sock *osk)
 	void *sptr = nsk->sk_security;
 #endif
 	memcpy(nsk, osk, offsetof(struct sock, sk_dontcopy_begin));
-
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-	nsk->sk_rcv_skb_ts = osk->sk_rcv_skb_ts;
-	nsk->sk_ts = osk->sk_ts;
-	nsk->sk_log_index = osk->sk_log_index;
-#endif
 
 	memcpy(&nsk->sk_dontcopy_end, &osk->sk_dontcopy_end,
 	       prot->obj_size - offsetof(struct sock, sk_dontcopy_end));

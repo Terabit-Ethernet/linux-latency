@@ -908,7 +908,6 @@ struct sk_buff {
 	__u16			mac_header;
 
 	/* private: */
-	__u32			headers_end[0];
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	/* Each skb stores the Tx/Rx layer timestamps
@@ -920,6 +919,7 @@ struct sk_buff {
 	struct tx_timestamps_t	tx_ts;
 #endif
 
+	__u32			headers_end[0];
 	/* public: */
 
 	/* These elements must be at the end, see alloc_skb() for details.  */
