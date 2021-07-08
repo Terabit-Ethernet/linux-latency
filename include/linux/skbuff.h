@@ -914,7 +914,8 @@ struct sk_buff {
 	 * of the request it was a part of and the TCP
 	 * port.
 	 */
-	unsigned int		port;
+	unsigned int		sport;
+	unsigned int		dport;
 	struct rx_timestamps_t	rx_ts;
 	struct tx_timestamps_t	tx_ts;
 #endif

@@ -2620,7 +2620,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 		unsigned int limit;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-		if (sysctl_net_latency_breakdown_on && skb->port) {
+		if (sysctl_net_latency_breakdown_on && skb->sport) {
 			skb->tx_ts.tcp = ktime_get_real();
 		}
 #endif

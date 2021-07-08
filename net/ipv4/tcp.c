@@ -1326,7 +1326,8 @@ new_segment:
 				sk->sk_rcv_skb_ts.sleep_enter = sk->sk_ts.sleep_enter;
 				sk->sk_rcv_skb_ts.wake_up = sk->sk_ts.wake_up;
 				sk->sk_rcv_skb_ts.ready = sk->sk_ts.ready;
-				skb->port = be16_to_cpu(sk->sk_dport);
+				skb->dport = be16_to_cpu(sk->sk_dport);
+				skb->sport = be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport);
 				skb->tx_ts.write_enter = sk->sk_ts.write_enter;
 				skb->rx_ts = sk->sk_rcv_skb_ts;
 			}
@@ -1363,7 +1364,7 @@ new_segment:
 				goto wait_for_space;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-			if (sysctl_net_latency_breakdown_on && skb->port) {
+			if (sysctl_net_latency_breakdown_on && skb->sport) {
 				skb->tx_ts.data_copy = ktime_get_real();
 			}
 #endif

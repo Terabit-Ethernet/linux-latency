@@ -77,12 +77,13 @@ struct sock_timestamps_t {
 };
 
 /* Prints the log of the latency breakdown for a given skb. */
-static inline void latency_breakdown_print_log(unsigned int port, struct rx_timestamps_t rx_ts, struct tx_timestamps_t tx_ts) {
+static inline void latency_breakdown_print_log(unsigned int sport, unsigned int dport, struct rx_timestamps_t rx_ts, struct tx_timestamps_t tx_ts) {
 	trace_printk(
-		"[latency-breakdown] port: %u "
+		"[latency-breakdown] source port: %u destination port: %u "
 		"-- rx -- hw: %lld alloc: %lld irq: %lld napi: %lld gro: %lld ip: %lld tcp: %lld read: %lld sleep: %lld ready: %lld wakeup: %lld data copy: %lld return: %lld "
 		"-- tx -- alloc: %lld write: %lld data copy: %lld tcp: %lld ip: %lld queue: %lld xmit: %lld finish: %lld\n",
-		port,
+		sport,
+		dport,
 		rx_ts.hw,
 		rx_ts.alloc,
 		rx_ts.irq,

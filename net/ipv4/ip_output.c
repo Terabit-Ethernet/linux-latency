@@ -462,7 +462,7 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	int res;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	if (sysctl_net_latency_breakdown_on && skb->port) {
+	if (sysctl_net_latency_breakdown_on && skb->sport) {
 		skb->tx_ts.ip = ktime_get_real();
 	}
 #endif

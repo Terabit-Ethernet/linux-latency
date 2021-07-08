@@ -407,9 +407,9 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		mlx5e_notify_hw(wq, sq->pc, sq->uar_map, cseg);
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	if (sysctl_net_latency_breakdown_on && skb->port) {
+	if (sysctl_net_latency_breakdown_on && skb->sport) {
 		skb->tx_ts.xmit_finish = ktime_get_real();
-		latency_breakdown_print_log(skb->port, skb->rx_ts, skb->tx_ts);
+		latency_breakdown_print_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
 	}
 #endif
 }
@@ -643,7 +643,7 @@ netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev)
 	u16 pi;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	if (sysctl_net_latency_breakdown_on && skb->port) {
+	if (sysctl_net_latency_breakdown_on && skb->sport) {
 		skb->tx_ts.xmit = ktime_get_real();
 	}
 #endif
