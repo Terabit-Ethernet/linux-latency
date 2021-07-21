@@ -1320,7 +1320,7 @@ new_segment:
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		if (sysctl_net_latency_breakdown_on) {
-			if (sk->sk_log_index++ % sysctl_net_latency_breakdown_on == 0) {
+			if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0) {
 				sk->sk_rcv_skb_ts.read_enter = sk->sk_ts.read_enter;
 				sk->sk_rcv_skb_ts.read_return = sk->sk_ts.read_return;
 				sk->sk_rcv_skb_ts.sleep_enter = sk->sk_ts.sleep_enter;

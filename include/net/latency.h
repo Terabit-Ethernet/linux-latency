@@ -17,7 +17,7 @@
 #include <uapi/linux/if.h>
 
 /* Standard defines */
-#define LATENCY_BREAKDOWN_LOG_MIN 100
+#define LATENCY_BREAKDOWN_LOG_MIN 10
 #define LATENCY_BREAKDOWN_LOG_MAX 10000
 #define LATENCY_BREAKDOWN_LOG_DEFAULT 997
 
