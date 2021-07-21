@@ -130,7 +130,7 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
-		this_cpu_write(latency_breakdown_napi_ts, ktime_get_real());
+		latency_breakdown_napi_ts[smp_processor_id()] = ktime_get_real();
 	}
 #endif
 
@@ -227,7 +227,7 @@ void mlx5e_completion_event(struct mlx5_core_cq *mcq, struct mlx5_eqe *eqe)
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
-		this_cpu_write(latency_breakdown_irq_ts, ktime_get_real());
+		latency_breakdown_irq_ts[smp_processor_id()] = ktime_get_real();
 	}
 #endif
 

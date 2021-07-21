@@ -13,7 +13,6 @@
 #define _LATENCY_H
 
 #include <linux/ktime.h>
-#include <linux/percpu.h>
 #include <linux/string.h>
 #include <uapi/linux/if.h>
 
@@ -29,8 +28,8 @@ extern unsigned int sysctl_net_latency_breakdown_log_max;
 extern unsigned int sysctl_net_latency_breakdown_log_min;
 
 /* Per-CPU variables for measurements. */
-DECLARE_PER_CPU(ktime_t, latency_breakdown_irq_ts);
-DECLARE_PER_CPU(ktime_t, latency_breakdown_napi_ts);
+extern ktime_t latency_breakdown_irq_ts[];
+extern ktime_t latency_breakdown_napi_ts[];
 
 /* Receive data path timestamps for a single skb. */
 struct rx_timestamps_t {
