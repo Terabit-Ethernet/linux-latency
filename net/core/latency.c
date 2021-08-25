@@ -23,6 +23,9 @@ EXPORT_SYMBOL(sysctl_net_latency_breakdown_log_max);
 unsigned int sysctl_net_latency_breakdown_log_min __read_mostly = LATENCY_BREAKDOWN_LOG_MIN;
 EXPORT_SYMBOL(sysctl_net_latency_breakdown_log_min);
 
+unsigned int sysctl_net_latency_breakdown_nrfs __read_mostly = 0;
+EXPORT_SYMBOL(sysctl_net_latency_breakdown_nrfs);
+
 ktime_t latency_breakdown_irq_ts[CONFIG_NR_CPUS];
 EXPORT_SYMBOL(latency_breakdown_irq_ts);
 

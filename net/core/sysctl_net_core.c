@@ -589,6 +589,13 @@ static struct ctl_table net_core_table[] = {
 		.extra1         = &sysctl_net_latency_breakdown_log_min,
 		.extra2         = &sysctl_net_latency_breakdown_log_max,
 	},
+	{
+		.procname	= "latency_breakdown_nrfs",
+		.data		= &sysctl_net_latency_breakdown_nrfs,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec,
+	},
 #endif
 	{ }
 };

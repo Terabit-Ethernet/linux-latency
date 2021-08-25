@@ -4394,6 +4394,9 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		 *     This guarantees that all previous packets for the flow
 		 *     have been dequeued, thus preserving in order delivery.
 		 */
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+		if (!sysctl_net_latency_breakdown_nrfs) {
+#endif
 		if (unlikely(tcpu != next_cpu) &&
 		    (tcpu >= nr_cpu_ids || !cpu_online(tcpu) ||
 		     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
@@ -4401,7 +4404,44 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 			tcpu = next_cpu;
 			rflow = set_rps_cpu(dev, skb, rflow, next_cpu);
 		}
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+		}
+		else {
+			int nr_cpus = num_online_cpus();
+			int nr_nodes = num_online_nodes();
+			int tnode = next_cpu % nr_nodes;
 
+			if ((tcpu >= nr_cpu_ids || !cpu_online(tcpu)) ||
+			    (tcpu == next_cpu &&
+			     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
+			      rflow->last_qtail)) >= 0)) {
+				struct flow_keys keys;
+				u32 nrfs_cpu;
+
+				/* @client: use 'keys.ports.dst'
+				 * @server: use 'keys.ports.src'
+				 * We use source port number to randomly choose the core
+				 * because source port is randomly chosen
+				 */
+				skb_flow_dissect_flow_keys(skb, &keys,
+					FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL);
+				nrfs_cpu = (ntohs((__force u16)keys.ports.dst) %
+					(nr_cpus / nr_nodes - 1)) * nr_nodes + tnode;
+
+				if (nrfs_cpu >= next_cpu)
+					nrfs_cpu += nr_nodes;
+
+				tcpu = nrfs_cpu;
+				rflow = set_rps_cpu(dev, skb, rflow, nrfs_cpu);
+
+				//if (rflow->cpu < nr_cpu_ids)
+				//	printk("(pid %d cpu %d) sport %u nrfs_cpu %u (app_cpu %u)\n",
+				//		current->pid, current->cpu,
+				//		ntohs((__force u16)keys.ports.dst),
+				//		nrfs_cpu, next_cpu);
+			}
+		}
+#endif
 		if (tcpu < nr_cpu_ids && cpu_online(tcpu)) {
 			*rflowp = rflow;
 			cpu = tcpu;

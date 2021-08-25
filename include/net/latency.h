@@ -17,7 +17,7 @@
 #include <uapi/linux/if.h>
 
 /* Standard defines */
-#define LATENCY_BREAKDOWN_LOG_MIN 10
+#define LATENCY_BREAKDOWN_LOG_MIN 0
 #define LATENCY_BREAKDOWN_LOG_MAX 10000
 #define LATENCY_BREAKDOWN_LOG_DEFAULT 997
 
@@ -26,6 +26,7 @@ extern unsigned int sysctl_net_latency_breakdown_on;
 extern unsigned int sysctl_net_latency_breakdown_log;
 extern unsigned int sysctl_net_latency_breakdown_log_max;
 extern unsigned int sysctl_net_latency_breakdown_log_min;
+extern unsigned int sysctl_net_latency_breakdown_nrfs;
 
 /* Per-CPU variables for measurements. */
 extern ktime_t latency_breakdown_irq_ts[];
