@@ -1325,6 +1325,69 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 
 	skb_set_dst_pending_confirm(skb, sk->sk_dst_pending_confirm);
 
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (tcb->tcp_flags & TCPHDR_SYN) {
+		/*
+		 * For new RFS: To move apps to non-softirq cores.
+		 * For now, this is disabled and we use 'taskset'.
+		 */
+		if (0 && sysctl_net_latency_breakdown_nrfs) {
+			cpumask_var_t new_mask;
+			unsigned long *mask_bits;
+			unsigned long cur_bits, app_bits = 0, new_bits;
+
+			int nr_cpus = num_online_cpus();
+			int nr_nodes = num_online_nodes();
+			int k_softirq, k_app, i, j, iter_cpu;
+
+			if (!alloc_cpumask_var(&new_mask, GFP_KERNEL))
+				return -ENOMEM;
+
+			mask_bits = cpumask_bits(&current->cpus_mask);
+			cur_bits = *mask_bits;
+
+			/* Check if 1 <= k_softirq < #cores per node. */
+			k_softirq = sysctl_net_latency_breakdown_nrfs;
+			if (k_softirq < 0)
+				k_softirq = 1;
+			if (k_softirq >= nr_cpus / nr_nodes)
+				k_softirq = (nr_cpus / nr_nodes) - 1;
+			k_app = (nr_cpus / nr_nodes) - k_softirq;
+
+			/* 
+			 * We use the first k_app cores for apps
+			 *  and the next k_softirq cores for softirq
+			 *  in each NUMA node.
+			 * Mark k_app cores for all NUMA nodes.
+			 */
+			for (i = 0; i < k_app; i++) {
+				for (j = 0; j < nr_nodes; j++) {
+					iter_cpu = (nr_nodes * i) + j;
+					app_bits |= (1 << iter_cpu);
+				}
+			}
+
+			/* If 'taskset' is applied to apps,
+			 *  it will be included in new_mask.
+			 */
+			if (app_bits & cur_bits)
+				new_bits = (app_bits & cur_bits);
+			else
+				new_bits = app_bits;
+
+			cpumask_clear(new_mask);
+			mask_bits = cpumask_bits(new_mask);
+			*mask_bits = new_bits;
+			sched_setaffinity(current->pid, new_mask);
+			free_cpumask_var(new_mask);
+		}
+
+		/* To keep track of (pid, port). This is for latency breakdown. */
+		//printk("(pid %d) sport %u dport %u\n",
+		//      current->pid, ntohs(inet->inet_sport), ntohs(inet->inet_dport));
+	}
+#endif
+
 	/* Build TCP header and checksum it. */
 	th = (struct tcphdr *)skb->data;
 	th->source		= inet->inet_sport;

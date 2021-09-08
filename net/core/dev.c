@@ -4407,6 +4407,59 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		}
 		else {
+			/* new implementation:
+			 * Each flow chooses a random core from k_softirq cores
+			 * In each NUMA,
+			 *   first 'k_app' cores are for apps 
+			 *   the next 'k_softirq' cores are for softirq
+			 */
+			int nr_cpus = num_online_cpus();
+			int nr_nodes = num_online_nodes();
+			int tnode = next_cpu % nr_nodes;
+			int next_node = next_cpu % nr_nodes;
+
+			if ((tcpu >= nr_cpu_ids || !cpu_online(tcpu)) ||
+			    (unlikely(tnode != next_node) &&
+			     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
+			      rflow->last_qtail)) >= 0)) {
+				int k_softirq, k_app;
+				u32 nrfs_cpu;
+
+				/* Check if 1 <= k_softirq < #cores per node */
+				k_softirq = sysctl_net_latency_breakdown_nrfs;
+				if (k_softirq < 0)
+					k_softirq = 1;
+				if (k_softirq >= nr_cpus / nr_nodes)
+					k_softirq = (nr_cpus / nr_nodes) - 1;
+				k_app = (nr_cpus / nr_nodes) - k_softirq;
+
+				/* We use rx queue index to randomly choose the core */
+				nrfs_cpu = ((skb_get_rx_queue(skb) % k_softirq) + k_app)
+						* nr_nodes + next_node;
+
+				tcpu = nrfs_cpu;
+				rflow = set_rps_cpu(dev, skb, rflow, nrfs_cpu);
+
+				/*
+				if (rflow->cpu < nr_cpu_ids) {
+					struct flow_keys keys;
+					skb_flow_dissect_flow_keys(skb, &keys,
+						FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL);
+
+					printk("(pid %d cpu %d) port (%u,%u) rxq_in %u nrfs_cpu %u (app_cpu %u)\n",
+						current->pid, current->cpu,
+						ntohs((__force u16)keys.ports.src),
+						ntohs((__force u16)keys.ports.dst),
+						skb_get_rx_queue(skb),
+						nrfs_cpu, next_cpu);
+				}
+				*/
+			}
+
+			/* old implementation:
+			 * Each flow simply chooses a random core different from app core
+			 */
+			/*
 			int nr_cpus = num_online_cpus();
 			int nr_nodes = num_online_nodes();
 			int tnode = next_cpu % nr_nodes;
@@ -4418,11 +4471,6 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 				struct flow_keys keys;
 				u32 nrfs_cpu;
 
-				/* @client: use 'keys.ports.dst'
-				 * @server: use 'keys.ports.src'
-				 * We use source port number to randomly choose the core
-				 * because source port is randomly chosen
-				 */
 				skb_flow_dissect_flow_keys(skb, &keys,
 					FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL);
 				nrfs_cpu = (ntohs((__force u16)keys.ports.dst) %
@@ -4433,13 +4481,8 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 
 				tcpu = nrfs_cpu;
 				rflow = set_rps_cpu(dev, skb, rflow, nrfs_cpu);
-
-				//if (rflow->cpu < nr_cpu_ids)
-				//	printk("(pid %d cpu %d) sport %u nrfs_cpu %u (app_cpu %u)\n",
-				//		current->pid, current->cpu,
-				//		ntohs((__force u16)keys.ports.dst),
-				//		nrfs_cpu, next_cpu);
 			}
+			*/
 		}
 #endif
 		if (tcpu < nr_cpu_ids && cpu_online(tcpu)) {
