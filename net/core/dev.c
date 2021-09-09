@@ -4415,23 +4415,30 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 			 */
 			int nr_cpus = num_online_cpus();
 			int nr_nodes = num_online_nodes();
-			int tnode = next_cpu % nr_nodes;
 			int next_node = next_cpu % nr_nodes;
+			int k_softirq, k_app, i;
+			bool k_cores = false;
 
-			if ((tcpu >= nr_cpu_ids || !cpu_online(tcpu)) ||
-			    (unlikely(tnode != next_node) &&
+			/* Check if 1 <= k_softirq < #cores per node */
+			k_softirq = sysctl_net_latency_breakdown_nrfs;
+			if (k_softirq < 0)
+				k_softirq = 1;
+			if (k_softirq >= nr_cpus / nr_nodes)
+				k_softirq = (nr_cpus / nr_nodes) - 1;
+			k_app = (nr_cpus / nr_nodes) - k_softirq;
+
+			for (i = 0; i < k_softirq; i++) {
+				if (tcpu == (k_app + i) * nr_nodes + next_node) {
+					k_cores = true;
+					break;
+				}
+			}
+
+			if (unlikely(!k_cores) &&
+			    (tcpu >= nr_cpu_ids || !cpu_online(tcpu) ||
 			     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
 			      rflow->last_qtail)) >= 0)) {
-				int k_softirq, k_app;
 				u32 nrfs_cpu;
-
-				/* Check if 1 <= k_softirq < #cores per node */
-				k_softirq = sysctl_net_latency_breakdown_nrfs;
-				if (k_softirq < 0)
-					k_softirq = 1;
-				if (k_softirq >= nr_cpus / nr_nodes)
-					k_softirq = (nr_cpus / nr_nodes) - 1;
-				k_app = (nr_cpus / nr_nodes) - k_softirq;
 
 				/* We use rx queue index to randomly choose the core */
 				nrfs_cpu = ((skb_get_rx_queue(skb) % k_softirq) + k_app)
