@@ -129,9 +129,9 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 	int i;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	if (sysctl_net_latency_breakdown_on) {
-		latency_breakdown_napi_ts[smp_processor_id()] = ktime_get_real();
-	}
+	//if (sysctl_net_latency_breakdown_on) {
+	//	latency_breakdown_napi_ts[smp_processor_id()] = ktime_get_real();
+	//}
 #endif
 
 	rcu_read_lock();
@@ -226,9 +226,9 @@ void mlx5e_completion_event(struct mlx5_core_cq *mcq, struct mlx5_eqe *eqe)
 	struct mlx5e_cq *cq = container_of(mcq, struct mlx5e_cq, mcq);
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	if (sysctl_net_latency_breakdown_on) {
-		latency_breakdown_irq_ts[smp_processor_id()] = ktime_get_real();
-	}
+	//if (sysctl_net_latency_breakdown_on) {
+	//	latency_breakdown_irq_ts[smp_processor_id()] = ktime_get_real();
+	//}
 #endif
 
 	napi_schedule(cq->napi);

@@ -1235,7 +1235,7 @@ static void mlx5e_handle_rx_cqe(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 	u16 ci;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	unsigned int curr_cpu = smp_processor_id();
+	//unsigned int curr_cpu = smp_processor_id();
 #endif
 
 	ci       = mlx5_wq_cyc_ctr2ix(wq, be16_to_cpu(cqe->wqe_counter));
@@ -1273,8 +1273,8 @@ static void mlx5e_handle_rx_cqe(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
-		skb->rx_ts.irq = latency_breakdown_irq_ts[curr_cpu];
-		skb->rx_ts.napi = latency_breakdown_napi_ts[curr_cpu];
+		//skb->rx_ts.irq = latency_breakdown_irq_ts[curr_cpu];
+		//skb->rx_ts.napi = latency_breakdown_napi_ts[curr_cpu];
 		skb->rx_ts.hw = skb_shinfo(skb)->hwtstamps.hwtstamp;
 		skb->rx_ts.gro = ktime_get_real();
 	}
@@ -1520,7 +1520,7 @@ static void mlx5e_handle_rx_cqe_mpwrq(struct mlx5e_rq *rq, struct mlx5_cqe64 *cq
 	u16 cqe_bcnt;
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	unsigned int curr_cpu = smp_processor_id();
+	//unsigned int curr_cpu = smp_processor_id();
 #endif
 
 	wi->consumed_strides += cstrides;
@@ -1558,8 +1558,8 @@ static void mlx5e_handle_rx_cqe_mpwrq(struct mlx5e_rq *rq, struct mlx5_cqe64 *cq
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
-		skb->rx_ts.irq = latency_breakdown_irq_ts[curr_cpu];
-		skb->rx_ts.napi = latency_breakdown_napi_ts[curr_cpu];
+		//skb->rx_ts.irq = latency_breakdown_irq_ts[curr_cpu];
+		//skb->rx_ts.napi = latency_breakdown_napi_ts[curr_cpu];
 		skb->rx_ts.hw = skb_shinfo(skb)->hwtstamps.hwtstamp;
 		skb->rx_ts.gro = ktime_get_real();
 	}
