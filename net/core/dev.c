@@ -4367,6 +4367,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 	sock_flow_table = rcu_dereference(rps_sock_flow_table);
 	if (flow_table && sock_flow_table) {
 		struct rps_dev_flow *rflow;
+		// next cpu is the app core.
 		u32 next_cpu;
 		u32 ident;
 
@@ -4381,6 +4382,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		 * we can look at the local (per receive queue) flow table
 		 */
 		rflow = &flow_table->flows[hash & flow_table->mask];
+		// tcpu is the current irq core
 		tcpu = rflow->cpu;
 
 		/*
@@ -4429,6 +4431,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 
 			for (i = 0; i < k_softirq; i++) {
 				if (tcpu == (k_app + i) * nr_nodes + next_node) {
+					// check if the app core is in the same numa node as softirq;
 					k_cores = true;
 					break;
 				}
@@ -4441,12 +4444,12 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 				u32 nrfs_cpu;
 
 				/* We use rx queue index to randomly choose the core */
-				nrfs_cpu = ((skb_get_rx_queue(skb) % k_softirq) + k_app)
+				nrfs_cpu = ((skb_get_rx_queue(skb)  % k_softirq) + k_app)
 						* nr_nodes + next_node;
 
 				tcpu = nrfs_cpu;
 				rflow = set_rps_cpu(dev, skb, rflow, nrfs_cpu);
-
+				 // printk("nrfs cpu:%d rx_queue:%d next_cpu:%d hash:%d\n", tcpu, skb_get_rx_queue(skb), next_cpu, hash);
 				/*
 				if (rflow->cpu < nr_cpu_ids) {
 					struct flow_keys keys;
