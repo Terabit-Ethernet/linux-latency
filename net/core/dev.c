@@ -4396,9 +4396,9 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		 *     This guarantees that all previous packets for the flow
 		 *     have been dequeued, thus preserving in order delivery.
 		 */
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-		if (!sysctl_net_latency_breakdown_nrfs) {
-#endif
+// #if IS_ENABLED(CONFIG_NET_LATENCY)
+// 		if (!sysctl_net_latency_breakdown_nrfs) {
+// #endif
 		if (unlikely(tcpu != next_cpu) &&
 		    (tcpu >= nr_cpu_ids || !cpu_online(tcpu) ||
 		     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
@@ -4406,95 +4406,95 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 			tcpu = next_cpu;
 			rflow = set_rps_cpu(dev, skb, rflow, next_cpu);
 		}
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-		}
-		else {
-			/* new implementation:
-			 * Each flow chooses a random core from k_softirq cores
-			 * In each NUMA,
-			 *   first 'k_app' cores are for apps 
-			 *   the next 'k_softirq' cores are for softirq
-			 */
-			int nr_cpus = num_online_cpus();
-			int nr_nodes = num_online_nodes();
-			int next_node = next_cpu % nr_nodes;
-			int k_softirq, k_app, i;
-			bool k_cores = false;
+// #if IS_ENABLED(CONFIG_NET_LATENCY)
+// 		}
+// 		else {
+// 			/* new implementation:
+// 			 * Each flow chooses a random core from k_softirq cores
+// 			 * In each NUMA,
+// 			 *   first 'k_app' cores are for apps 
+// 			 *   the next 'k_softirq' cores are for softirq
+// 			 */
+// 			int nr_cpus = num_online_cpus();
+// 			int nr_nodes = num_online_nodes();
+// 			int next_node = next_cpu % nr_nodes;
+// 			int k_softirq, k_app, i;
+// 			bool k_cores = false;
 
-			/* Check if 1 <= k_softirq < #cores per node */
-			k_softirq = sysctl_net_latency_breakdown_nrfs;
-			if (k_softirq < 0)
-				k_softirq = 1;
-			if (k_softirq >= nr_cpus / nr_nodes)
-				k_softirq = (nr_cpus / nr_nodes) - 1;
-			k_app = (nr_cpus / nr_nodes) - k_softirq;
+// 			/* Check if 1 <= k_softirq < #cores per node */
+// 			k_softirq = sysctl_net_latency_breakdown_nrfs;
+// 			if (k_softirq < 0)
+// 				k_softirq = 1;
+// 			if (k_softirq >= nr_cpus / nr_nodes)
+// 				k_softirq = (nr_cpus / nr_nodes) - 1;
+// 			k_app = (nr_cpus / nr_nodes) - k_softirq;
 
-			for (i = 0; i < k_softirq; i++) {
-				if (tcpu == (k_app + i) * nr_nodes + next_node) {
-					// check if the app core is in the same numa node as softirq;
-					k_cores = true;
-					break;
-				}
-			}
+// 			for (i = 0; i < k_softirq; i++) {
+// 				if (tcpu == (k_app + i) * nr_nodes + next_node) {
+// 					// check if the app core is in the same numa node as softirq;
+// 					k_cores = true;
+// 					break;
+// 				}
+// 			}
 
-			if (unlikely(!k_cores) &&
-			    (tcpu >= nr_cpu_ids || !cpu_online(tcpu) ||
-			     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
-			      rflow->last_qtail)) >= 0)) {
-				u32 nrfs_cpu;
+// 			if (unlikely(!k_cores) &&
+// 			    (tcpu >= nr_cpu_ids || !cpu_online(tcpu) ||
+// 			     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
+// 			      rflow->last_qtail)) >= 0)) {
+// 				u32 nrfs_cpu;
 
-				/* We use rx queue index to randomly choose the core */
-				nrfs_cpu = ((skb_get_rx_queue(skb)  % k_softirq) + k_app)
-						* nr_nodes + next_node;
+// 				/* We use rx queue index to randomly choose the core */
+// 				nrfs_cpu = ((skb_get_rx_queue(skb)  % k_softirq) + k_app)
+// 						* nr_nodes + next_node;
 
-				tcpu = nrfs_cpu;
-				rflow = set_rps_cpu(dev, skb, rflow, nrfs_cpu);
-				 // printk("nrfs cpu:%d rx_queue:%d next_cpu:%d hash:%d\n", tcpu, skb_get_rx_queue(skb), next_cpu, hash);
-				/*
-				if (rflow->cpu < nr_cpu_ids) {
-					struct flow_keys keys;
-					skb_flow_dissect_flow_keys(skb, &keys,
-						FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL);
+// 				tcpu = nrfs_cpu;
+// 				rflow = set_rps_cpu(dev, skb, rflow, nrfs_cpu);
+// 				 // printk("nrfs cpu:%d rx_queue:%d next_cpu:%d hash:%d\n", tcpu, skb_get_rx_queue(skb), next_cpu, hash);
+// 				/*
+// 				if (rflow->cpu < nr_cpu_ids) {
+// 					struct flow_keys keys;
+// 					skb_flow_dissect_flow_keys(skb, &keys,
+// 						FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL);
 
-					printk("(pid %d cpu %d) port (%u,%u) rxq_in %u nrfs_cpu %u (app_cpu %u)\n",
-						current->pid, current->cpu,
-						ntohs((__force u16)keys.ports.src),
-						ntohs((__force u16)keys.ports.dst),
-						skb_get_rx_queue(skb),
-						nrfs_cpu, next_cpu);
-				}
-				*/
-			}
+// 					printk("(pid %d cpu %d) port (%u,%u) rxq_in %u nrfs_cpu %u (app_cpu %u)\n",
+// 						current->pid, current->cpu,
+// 						ntohs((__force u16)keys.ports.src),
+// 						ntohs((__force u16)keys.ports.dst),
+// 						skb_get_rx_queue(skb),
+// 						nrfs_cpu, next_cpu);
+// 				}
+// 				*/
+// 			}
 
-			/* old implementation:
-			 * Each flow simply chooses a random core different from app core
-			 */
-			/*
-			int nr_cpus = num_online_cpus();
-			int nr_nodes = num_online_nodes();
-			int tnode = next_cpu % nr_nodes;
+// 			/* old implementation:
+// 			 * Each flow simply chooses a random core different from app core
+// 			 */
+// 			/*
+// 			int nr_cpus = num_online_cpus();
+// 			int nr_nodes = num_online_nodes();
+// 			int tnode = next_cpu % nr_nodes;
 
-			if ((tcpu >= nr_cpu_ids || !cpu_online(tcpu)) ||
-			    (tcpu == next_cpu &&
-			     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
-			      rflow->last_qtail)) >= 0)) {
-				struct flow_keys keys;
-				u32 nrfs_cpu;
+// 			if ((tcpu >= nr_cpu_ids || !cpu_online(tcpu)) ||
+// 			    (tcpu == next_cpu &&
+// 			     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
+// 			      rflow->last_qtail)) >= 0)) {
+// 				struct flow_keys keys;
+// 				u32 nrfs_cpu;
 
-				skb_flow_dissect_flow_keys(skb, &keys,
-					FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL);
-				nrfs_cpu = (ntohs((__force u16)keys.ports.dst) %
-					(nr_cpus / nr_nodes - 1)) * nr_nodes + tnode;
+// 				skb_flow_dissect_flow_keys(skb, &keys,
+// 					FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL);
+// 				nrfs_cpu = (ntohs((__force u16)keys.ports.dst) %
+// 					(nr_cpus / nr_nodes - 1)) * nr_nodes + tnode;
 
-				if (nrfs_cpu >= next_cpu)
-					nrfs_cpu += nr_nodes;
+// 				if (nrfs_cpu >= next_cpu)
+// 					nrfs_cpu += nr_nodes;
 
-				tcpu = nrfs_cpu;
-				rflow = set_rps_cpu(dev, skb, rflow, nrfs_cpu);
-			}
-			*/
-		}
-#endif
+// 				tcpu = nrfs_cpu;
+// 				rflow = set_rps_cpu(dev, skb, rflow, nrfs_cpu);
+// 			}
+// 			*/
+// 		}
+// #endif
 		if (tcpu < nr_cpu_ids && cpu_online(tcpu)) {
 			*rflowp = rflow;
 			cpu = tcpu;
