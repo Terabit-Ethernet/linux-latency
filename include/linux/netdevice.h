@@ -724,7 +724,7 @@ static inline void rps_record_sock_flow(struct rps_sock_flow_table *table,
 			*   first 'k_app' cores are for apps 
 			*   the next 'k_softirq' cores are for softirq
 			*/
-		int k_softirq, k_app, i;
+		int k_softirq, k_app;
 		int nr_cpus = num_online_cpus();
 		int nr_nodes = num_online_nodes();
 		int next_node = raw_smp_processor_id() % nr_nodes;
