@@ -724,6 +724,7 @@ static inline void rps_record_sock_flow(struct rps_sock_flow_table *table,
 			*   first 'k_app' cores are for apps 
 			*   the next 'k_softirq' cores are for softirq
 			*/
+	if (!sysctl_net_latency_breakdown_nrfs) {
 		int k_softirq, k_app;
 		int nr_cpus = num_online_cpus();
 		int nr_nodes = num_online_nodes();
@@ -737,6 +738,11 @@ static inline void rps_record_sock_flow(struct rps_sock_flow_table *table,
 			k_softirq = (nr_cpus / nr_nodes) - 1;
 		k_app = (nr_cpus / nr_nodes) - k_softirq;
 		val |= (k_app + raw_smp_processor_id() % k_softirq) * nr_nodes + next_node;
+	} else {
+		/* original aRFS code */
+		/* We only give a hint, preemption can change CPU under us */
+		val |= raw_smp_processor_id();
+	}
 #else 
 		/* original aRFS code */
 		/* We only give a hint, preemption can change CPU under us */
