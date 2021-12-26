@@ -717,39 +717,9 @@ static inline void rps_record_sock_flow(struct rps_sock_flow_table *table,
 	if (table && hash) {
 		unsigned int index = hash & table->mask;
 		u32 val = hash & ~rps_cpu_mask;
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-		/* new implementation:
-			* Each flow chooses a random core from k_softirq cores
-			* In each NUMA,
-			*   first 'k_app' cores are for apps 
-			*   the next 'k_softirq' cores are for softirq
-			*/
-	if (sysctl_net_latency_breakdown_nrfs) {
-		int k_softirq, k_app;
-		int nr_cpus = num_online_cpus();
-		int nr_nodes = num_online_nodes();
-		int next_node = raw_smp_processor_id() % nr_nodes;
 
-		/* Check if 1 <= k_softirq < #cores per node */
-		k_softirq = sysctl_net_latency_breakdown_nrfs;
-		if (k_softirq < 0)
-			k_softirq = 1;
-		if (k_softirq >= nr_cpus / nr_nodes)
-			k_softirq = (nr_cpus / nr_nodes) - 1;
-		k_app = (nr_cpus / nr_nodes) - k_softirq;
-		val |= (k_app + (raw_smp_processor_id() / nr_nodes) % k_softirq) * nr_nodes + next_node;
-	} else {
-		/* original aRFS code */
 		/* We only give a hint, preemption can change CPU under us */
 		val |= raw_smp_processor_id();
-	}
-#else 
-		/* original aRFS code */
-		/* We only give a hint, preemption can change CPU under us */
-		val |= raw_smp_processor_id();
-#endif 
-
-
 
 		if (table->ents[index] != val)
 			table->ents[index] = val;
