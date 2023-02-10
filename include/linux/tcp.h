@@ -412,8 +412,15 @@ struct tcp_sock {
 	 */
 	struct request_sock __rcu *fastopen_rsk;
 	struct saved_syn *saved_syn;
-};
 
+/* Qizhe: TCP time queue per request */
+	struct list_head qizhe_time_queue;
+};
+struct qizhe_time_element {
+        struct list_head entry;
+	ktime_t time;
+	int size;
+};
 enum tsq_enum {
 	TSQ_THROTTLED,
 	TSQ_QUEUED,

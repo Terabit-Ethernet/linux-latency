@@ -80,7 +80,7 @@
 #include <linux/jump_label_ratelimit.h>
 #include <net/busy_poll.h>
 #include <net/mptcp.h>
-
+#include <linux/inet.h>
 int sysctl_tcp_max_orphans __read_mostly = NR_FILE;
 
 #define FLAG_DATA		0x01 /* Incoming frame contained data.		*/
@@ -4929,7 +4929,8 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 	struct tcp_sock *tp = tcp_sk(sk);
 	bool fragstolen;
 	int eaten;
-
+	int qizhe_len;
+	struct qizhe_time_element *qizhe_element;
 	if (sk_is_mptcp(sk))
 		mptcp_incoming_options(sk, skb);
 
@@ -4951,7 +4952,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPZEROWINDOWDROP);
 			goto out_of_window;
 		}
-
+		qizhe_len = skb->len;
 		/* Ok. In sequence. In window. */
 queue_and_out:
 		if (skb_queue_len(&sk->sk_receive_queue) == 0)
@@ -4987,6 +4988,20 @@ queue_and_out:
 			kfree_skb_partial(skb, fragstolen);
 		if (!sock_flag(sk, SOCK_DEAD))
 			tcp_data_ready(sk);
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+		/* Same logic should be added to reorder traffic as well */
+	        if (sysctl_net_latency_breakdown_on && raw_smp_processor_id() == 0 &&
+			inet_sk(sk)->inet_saddr == in_aton("192.168.10.125")) {
+        	        qizhe_element = kmalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
+			qizhe_element->time = ktime_get_real();
+			qizhe_element->size = qizhe_len;
+			printk("element addr:%p\n", qizhe_element);
+			if(qizhe_element->size % 64 != 0)
+				WARN_ON(true);
+			INIT_LIST_HEAD(&qizhe_element->entry);
+			list_add_tail(&qizhe_element->entry, &tp->qizhe_time_queue);
+        	}
+#endif
 		return;
 	}
 
@@ -5714,7 +5729,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 	const struct tcphdr *th = (const struct tcphdr *)skb->data;
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int len = skb->len;
-
+	int qizhe_len;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
 		skb->rx_ts.tcp = ktime_get_real();
@@ -5833,6 +5848,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 
 			/* Bulk data transfer: receiver */
 			__skb_pull(skb, tcp_header_len);
+			qizhe_len = skb->len;
 			eaten = tcp_queue_rcv(sk, skb, &fragstolen);
 
 			tcp_event_data_recv(sk, skb);
@@ -5852,6 +5868,24 @@ no_ack:
 			if (eaten)
 				kfree_skb_partial(skb, fragstolen);
 			tcp_data_ready(sk);
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+      		        if (sysctl_net_latency_breakdown_on && eaten <= 0) {
+                	        skb->rx_ts.ready = ktime_get_real();
+                	}
+			/* Same logic should be added to reorder traffic as well */
+                	if (sysctl_net_latency_breakdown_on && raw_smp_processor_id() == 0 &&
+                        	inet_sk(sk)->inet_saddr == in_aton("192.168.10.125")) {
+                       		struct qizhe_time_element *qizhe_element;
+				qizhe_element = kmalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
+                        	qizhe_element->time = ktime_get_real();
+                        	qizhe_element->size = qizhe_len;
+				printk("element addr:%p\n", qizhe_element);
+				if(qizhe_element->size % 64 != 0)
+                                	WARN_ON(true);
+                        	INIT_LIST_HEAD(&qizhe_element->entry);
+                        	list_add_tail(&qizhe_element->entry, &tp->qizhe_time_queue);
+                	}
+#endif
 			return;
 		}
 	}

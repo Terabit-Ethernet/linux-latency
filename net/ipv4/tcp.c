@@ -267,7 +267,7 @@
 #include <linux/slab.h>
 #include <linux/errqueue.h>
 #include <linux/static_key.h>
-
+#include <linux/inet.h>
 #include <net/icmp.h>
 #include <net/inet_common.h>
 #include <net/tcp.h>
@@ -416,7 +416,8 @@ void tcp_init_sock(struct sock *sk)
 	tcp_init_xmit_timers(sk);
 	INIT_LIST_HEAD(&tp->tsq_node);
 	INIT_LIST_HEAD(&tp->tsorted_sent_queue);
-
+	/* Qizhe: add time queue per request */
+	INIT_LIST_HEAD(&tp->qizhe_time_queue);
 	icsk->icsk_rto = TCP_TIMEOUT_INIT;
 	icsk->icsk_rto_min = TCP_RTO_MIN;
 	icsk->icsk_delack_max = TCP_DELACK_MAX;
@@ -2043,7 +2044,9 @@ static int tcp_inq_hint(struct sock *sk)
  *	tricks with *seq access order and skb->users are not required.
  *	Probably, code can be easily improved even more.
  */
-
+u64 qizhe_cur_time = 0, qizhe_last_time = 0;
+u64 qizhe_total_time = 0;
+u64 qizhe_total = 0;
 int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len)
 {
@@ -2059,7 +2062,6 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	u32 urg_hole = 0;
 	struct scm_timestamping_internal tss;
 	int cmsg_flags;
-
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
 		sk->sk_ts.read_enter = ktime_get_real();
@@ -2225,6 +2227,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		continue;
 
 found_ok_skb:
+
 		/* Ok so how much can we use? */
 		used = skb->len - offset;
 		if (len < used)
@@ -2267,7 +2270,37 @@ found_ok_skb:
 		WRITE_ONCE(*seq, *seq + used);
 		copied += used;
 		len -= used;
-
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+                if (sysctl_net_latency_breakdown_on && raw_smp_processor_id() == 0 &&
+			 inet_sk(sk)->inet_saddr == in_aton("192.168.10.125")) {
+                        struct qizhe_time_element *element;
+			struct list_head *ele_entry, *safe;
+			list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
+				element = list_entry(ele_entry, struct qizhe_time_element, entry);
+				if (used != 64 || element->size < used) {
+					printk("used:%lu element->size:%d", used, element->size);
+				} else {
+					printk("element addr:%p used:%lu size:%d\n", element, used, element->size);
+					element->size -= used;
+					qizhe_total_time += ktime_get_real() - element->time;
+					printk("element wake up time:%lld element size:%d \n", ktime_get_real() - element->time, element->size);
+					qizhe_total += 1;
+				}
+				if(element->size == 0) {
+					list_del(&element->entry);
+					kfree(element);
+				}
+				break;
+			}
+			qizhe_cur_time = ktime_get_ns();
+                        if(qizhe_cur_time - qizhe_last_time > 10000000000 && qizhe_total != 0) {
+                        	printk("mean latency %llu\n", qizhe_total_time/qizhe_total);
+                                qizhe_last_time = qizhe_cur_time;
+                                qizhe_total_time = 0;
+                                qizhe_total = 0;
+                        }
+                }
+#endif
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		if (sysctl_net_latency_breakdown_on) {
 			sk->sk_rcv_skb_ts = skb->rx_ts;
