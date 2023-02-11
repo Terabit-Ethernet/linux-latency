@@ -551,7 +551,8 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 	tcp_bpf_clone(sk, newsk);
 
 	__TCP_INC_STATS(sock_net(sk), TCP_MIB_PASSIVEOPENS);
-
+	/* init the qizhe queue */
+	INIT_LIST_HEAD(&newtp->qizhe_time_queue);
 	return newsk;
 }
 EXPORT_SYMBOL(tcp_create_openreq_child);

@@ -410,7 +410,8 @@ void tcp_init_sock(struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-
+	struct list_head *ele_entry, *safe;
+	struct qizhe_time_element *element;
 	tp->out_of_order_queue = RB_ROOT;
 	sk->tcp_rtx_queue = RB_ROOT;
 	tcp_init_xmit_timers(sk);
@@ -418,6 +419,10 @@ void tcp_init_sock(struct sock *sk)
 	INIT_LIST_HEAD(&tp->tsorted_sent_queue);
 	/* Qizhe: add time queue per request */
 	INIT_LIST_HEAD(&tp->qizhe_time_queue);
+                        list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
+                                element = list_entry(ele_entry, struct qizhe_time_element, entry);
+                                printk("initial %p", element);
+                        }
 	icsk->icsk_rto = TCP_TIMEOUT_INIT;
 	icsk->icsk_rto_min = TCP_RTO_MIN;
 	icsk->icsk_delack_max = TCP_DELACK_MAX;
@@ -1320,7 +1325,7 @@ new_segment:
 			copy = msg_data_left(msg);
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-		if (sysctl_net_latency_breakdown_on) {
+		if (sysctl_net_latency_breakdown_on && !sysctl_net_latency_rx_sched_lat_only) {
 			if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0) {
 				sk->sk_rcv_skb_ts.read_enter = sk->sk_ts.read_enter;
 				sk->sk_rcv_skb_ts.read_return = sk->sk_ts.read_return;
@@ -2044,9 +2049,6 @@ static int tcp_inq_hint(struct sock *sk)
  *	tricks with *seq access order and skb->users are not required.
  *	Probably, code can be easily improved even more.
  */
-u64 qizhe_cur_time = 0, qizhe_last_time = 0;
-u64 qizhe_total_time = 0;
-u64 qizhe_total = 0;
 int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len)
 {
@@ -2271,20 +2273,22 @@ found_ok_skb:
 		copied += used;
 		len -= used;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-                if (sysctl_net_latency_breakdown_on && raw_smp_processor_id() == 0 &&
+                if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only &&
 			 inet_sk(sk)->inet_saddr == in_aton("192.168.10.125")) {
                         struct qizhe_time_element *element;
 			struct list_head *ele_entry, *safe;
 			list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
 				element = list_entry(ele_entry, struct qizhe_time_element, entry);
-				if (used != 64 || element->size < used) {
-					printk("used:%lu element->size:%d", used, element->size);
+				if (used != sysctl_net_latency_req_size || element->size < used) {
+					printk("used:%lu element->size:%d %p", used, element->size, element);
 				} else {
-					printk("element addr:%p used:%lu size:%d\n", element, used, element->size);
 					element->size -= used;
-					qizhe_total_time += ktime_get_real() - element->time;
-					printk("element wake up time:%lld element size:%d \n", ktime_get_real() - element->time, element->size);
-					qizhe_total += 1;
+					if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0) { 
+						trace_printk("[latency-breakdown] source port: %u destination port: %u "
+                                                	"-- rx -rx_sched: %lld \n", be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport), be16_to_cpu(sk->sk_dport),
+                                                        ktime_get_real() - element->time);
+ 
+					}	
 				}
 				if(element->size == 0) {
 					list_del(&element->entry);
@@ -2292,13 +2296,6 @@ found_ok_skb:
 				}
 				break;
 			}
-			qizhe_cur_time = ktime_get_ns();
-                        if(qizhe_cur_time - qizhe_last_time > 10000000000 && qizhe_total != 0) {
-                        	printk("mean latency %llu\n", qizhe_total_time/qizhe_total);
-                                qizhe_last_time = qizhe_cur_time;
-                                qizhe_total_time = 0;
-                                qizhe_total = 0;
-                        }
                 }
 #endif
 #if IS_ENABLED(CONFIG_NET_LATENCY)

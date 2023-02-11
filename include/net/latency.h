@@ -27,6 +27,8 @@ extern unsigned int sysctl_net_latency_breakdown_log;
 extern unsigned int sysctl_net_latency_breakdown_log_max;
 extern unsigned int sysctl_net_latency_breakdown_log_min;
 extern unsigned int sysctl_net_latency_breakdown_nrfs;
+extern unsigned int sysctl_net_latency_rx_sched_lat_only;
+extern unsigned int sysctl_net_latency_req_size;
 
 /* Per-CPU variables for measurements. */
 extern ktime_t latency_breakdown_irq_ts[];

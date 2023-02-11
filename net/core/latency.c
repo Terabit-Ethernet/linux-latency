@@ -26,6 +26,13 @@ EXPORT_SYMBOL(sysctl_net_latency_breakdown_log_min);
 unsigned int sysctl_net_latency_breakdown_nrfs __read_mostly = 0;
 EXPORT_SYMBOL(sysctl_net_latency_breakdown_nrfs);
 
+unsigned int sysctl_net_latency_rx_sched_lat_only __read_mostly = 0;
+EXPORT_SYMBOL(sysctl_net_latency_rx_sched_lat_only);
+
+unsigned int sysctl_net_latency_req_size __read_mostly = 64;
+EXPORT_SYMBOL(sysctl_net_latency_req_size);
+
+
 ktime_t latency_breakdown_irq_ts[CONFIG_NR_CPUS];
 EXPORT_SYMBOL(latency_breakdown_irq_ts);
 

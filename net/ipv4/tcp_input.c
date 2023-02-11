@@ -4990,12 +4990,11 @@ queue_and_out:
 			tcp_data_ready(sk);
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		/* Same logic should be added to reorder traffic as well */
-	        if (sysctl_net_latency_breakdown_on && raw_smp_processor_id() == 0 &&
+	        if (sysctl_net_latency_breakdown_on  && sysctl_net_latency_rx_sched_lat_only && 
 			inet_sk(sk)->inet_saddr == in_aton("192.168.10.125")) {
-        	        qizhe_element = kmalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
+        	        qizhe_element = kzalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
 			qizhe_element->time = ktime_get_real();
 			qizhe_element->size = qizhe_len;
-			printk("element addr:%p\n", qizhe_element);
 			if(qizhe_element->size % 64 != 0)
 				WARN_ON(true);
 			INIT_LIST_HEAD(&qizhe_element->entry);
@@ -5873,13 +5872,12 @@ no_ack:
                 	        skb->rx_ts.ready = ktime_get_real();
                 	}
 			/* Same logic should be added to reorder traffic as well */
-                	if (sysctl_net_latency_breakdown_on && raw_smp_processor_id() == 0 &&
+                	if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only  &&
                         	inet_sk(sk)->inet_saddr == in_aton("192.168.10.125")) {
                        		struct qizhe_time_element *qizhe_element;
-				qizhe_element = kmalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
+				qizhe_element = kzalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
                         	qizhe_element->time = ktime_get_real();
                         	qizhe_element->size = qizhe_len;
-				printk("element addr:%p\n", qizhe_element);
 				if(qizhe_element->size % 64 != 0)
                                 	WARN_ON(true);
                         	INIT_LIST_HEAD(&qizhe_element->entry);
