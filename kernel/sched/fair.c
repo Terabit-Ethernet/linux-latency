@@ -869,9 +869,10 @@ static void update_curr(struct cfs_rq *cfs_rq)
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 	if (accu_irq_accounting &&
-		current->pid == task_of(curr)->pid && irq_time > 0)
+		current->pid == task_of(curr)->pid && irq_time > 0) {
 		curr->vruntime -= calc_delta_fair((u64)irq_time, curr);
 		rq->prev_irq_time += irq_time;
+	}
 #endif
 
 	delta_exec = now - curr->exec_start;
