@@ -84,10 +84,6 @@ static unsigned int normalized_sysctl_sched_wakeup_granularity	= 1000000UL;
 
 const_debug unsigned int sysctl_sched_migration_cost	= 500000UL;
 
-static int accu_irq_accounting __read_mostly;
-module_param(accu_irq_accounting, int, 0644);
-MODULE_PARM_DESC(accu_irq_accounting, "accurate irq accounting");
-
 int sched_thermal_decay_shift;
 static int __init setup_sched_thermal_decay_shift(char *str)
 {
@@ -859,21 +855,8 @@ static void update_curr(struct cfs_rq *cfs_rq)
 	u64 now = rq_clock_task(rq_of(cfs_rq));
 	u64 delta_exec;
 
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-	struct rq *rq = rq_of(cfs_rq);
-	s64 irq_time = irq_time_read(cpu_of(rq)) - rq->prev_irq_time;
-#endif
-
 	if (unlikely(!curr))
 		return;
-
-#ifdef CONFIG_IRQ_TIME_ACCOUNTING
-	if (accu_irq_accounting &&
-		current->pid == task_of(curr)->pid && irq_time > 0) {
-		curr->vruntime -= calc_delta_fair((u64)irq_time, curr);
-		rq->prev_irq_time += irq_time;
-	}
-#endif
 
 	delta_exec = now - curr->exec_start;
 	if (unlikely((s64)delta_exec <= 0))

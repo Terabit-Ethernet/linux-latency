@@ -42,6 +42,10 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(sched_util_est_cfs_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_util_est_se_tp);
 EXPORT_TRACEPOINT_SYMBOL_GPL(sched_update_nr_running_tp);
 
+static int accu_irq_accounting __read_mostly;
+module_param(accu_irq_accounting, int, 0644);
+MODULE_PARM_DESC(accu_irq_accounting, "accurate irq accounting");
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 #ifdef CONFIG_SCHED_DEBUG
@@ -253,6 +257,10 @@ static void update_rq_clock_task(struct rq *rq, s64 delta)
 	s64 __maybe_unused steal = 0, irq_delta = 0;
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
+	if(accu_irq_accounting) {
+        	if(hardirq_count() || (in_serving_softirq() && current != this_cpu_ksoftirqd()))
+                	irqtime_account_irq(current);	
+	}
 	irq_delta = irq_time_read(cpu_of(rq)) - rq->prev_irq_time;
 
 	/*
