@@ -1677,7 +1677,6 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 
 	if (sk->sk_state == TCP_LISTEN) {
 		struct sock *nsk = tcp_v4_cookie_check(sk, skb);
-
 		if (!nsk)
 			goto discard;
 		if (nsk != sk) {
@@ -2198,6 +2197,8 @@ static int tcp_v4_init_sock(struct sock *sk)
 void tcp_v4_destroy_sock(struct sock *sk)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
+        struct qizhe_time_element *element;
+        struct list_head *ele_entry, *safe;
 
 	trace_tcp_destroy_sock(sk);
 
@@ -2210,6 +2211,11 @@ void tcp_v4_destroy_sock(struct sock *sk)
 	/* Cleanup up the write buffer. */
 	tcp_write_queue_purge(sk);
 
+	/* Cleanup tachyon queue */
+	list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
+		element = list_entry(ele_entry, struct qizhe_time_element, entry);
+		kfree(element);
+	}
 	/* Check if we want to disable active TFO */
 	tcp_fastopen_active_disable_ofo_check(sk);
 

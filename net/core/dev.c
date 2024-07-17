@@ -4415,12 +4415,13 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 			 *   first 'k_app' cores are for apps 
 			 *   the next 'k_softirq' cores are for softirq
 			 */
-			int nr_cpus = num_online_cpus();
+			/* assume hyperthread is enabled */
+			int nr_cpus = num_online_cpus() / 2;
 			int nr_nodes = num_online_nodes();
 			int next_node = next_cpu % nr_nodes;
 			int k_softirq, k_app, i;
 			bool k_cores = false;
-
+			u32 nrfs_cpu;
 			/* Check if 1 <= k_softirq < #cores per node */
 			k_softirq = sysctl_net_latency_breakdown_nrfs;
 			if (k_softirq < 0)
@@ -4429,24 +4430,30 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 				k_softirq = (nr_cpus / nr_nodes) - 1;
 			k_app = (nr_cpus / nr_nodes) - k_softirq;
 
-			for (i = 0; i < k_softirq; i++) {
-				if (tcpu == (k_app + i) * nr_nodes + next_node) {
-					// check if the app core is in the same numa node as softirq;
-					k_cores = true;
-					break;
-				}
-			}
-
-			if (unlikely(!k_cores) &&
+			//for (i = 0; i < k_softirq; i++) {
+			//	if (tcpu == (k_app + i) * nr_nodes + next_node) {
+			//		// check if the app core is in the same numa node as softirq;
+			//		k_cores = true;
+			//		break;
+			//	}
+			// }
+                        nrfs_cpu = ((skb_get_rx_queue(skb)  % k_softirq) + k_app)
+                                * nr_nodes + next_node;
+                        if(next_cpu >= 32) {
+                                nrfs_cpu += 32;
+                        }
+			if (unlikely(nrfs_cpu != tcpu) &&
 			    (tcpu >= nr_cpu_ids || !cpu_online(tcpu) ||
 			     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
 			      rflow->last_qtail)) >= 0)) {
-				u32 nrfs_cpu;
+				// u32 nrfs_cpu;
 
 				/* We use rx queue index to randomly choose the core */
-				nrfs_cpu = ((skb_get_rx_queue(skb)  % k_softirq) + k_app)
-						* nr_nodes + next_node;
-
+				// nrfs_cpu = ((skb_get_rx_queue(skb)  % k_softirq) + k_app)
+				//		* nr_nodes + next_node;
+				// if(next_cpu >= 32) {
+				//	nrfs_cpu += 32;
+				// }
 				tcpu = nrfs_cpu;
 				rflow = set_rps_cpu(dev, skb, rflow, nrfs_cpu);
 				 // printk("nrfs cpu:%d rx_queue:%d next_cpu:%d hash:%d\n", tcpu, skb_get_rx_queue(skb), next_cpu, hash);

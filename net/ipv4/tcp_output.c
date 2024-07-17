@@ -44,7 +44,7 @@
 #include <linux/gfp.h>
 #include <linux/module.h>
 #include <linux/static_key.h>
-
+#include <linux/inet.h>
 #include <trace/events/tcp.h>
 
 /* Refresh clocks of a TCP socket,
@@ -67,7 +67,7 @@ static void tcp_event_new_data_sent(struct sock *sk, struct sk_buff *skb)
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int prior_packets = tp->packets_out;
-
+	
 	WRITE_ONCE(tp->snd_nxt, TCP_SKB_CB(skb)->end_seq);
 
 	__skb_unlink(skb, &sk->sk_write_queue);

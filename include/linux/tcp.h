@@ -420,6 +420,7 @@ struct qizhe_time_element {
         struct list_head entry;
 	ktime_t time;
 	int size;
+	int core;
 };
 enum tsq_enum {
 	TSQ_THROTTLED,

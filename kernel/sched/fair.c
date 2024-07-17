@@ -4420,8 +4420,9 @@ check_preempt_tick(struct cfs_rq *cfs_rq, struct sched_entity *curr)
 	if (delta < 0)
 		return;
 
-	if (delta > ideal_runtime)
+	if (delta > ideal_runtime) {
 		resched_curr(rq_of(cfs_rq));
+	}
 }
 
 static void
@@ -7013,8 +7014,8 @@ static void check_preempt_wakeup(struct rq *rq, struct task_struct *p, int wake_
 		if (!next_buddy_marked)
 			set_next_buddy(pse);
 		goto preempt;
-	}
-
+	} 
+	
 	return;
 
 preempt:

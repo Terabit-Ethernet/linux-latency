@@ -410,8 +410,6 @@ void tcp_init_sock(struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
-	struct list_head *ele_entry, *safe;
-	struct qizhe_time_element *element;
 	tp->out_of_order_queue = RB_ROOT;
 	sk->tcp_rtx_queue = RB_ROOT;
 	tcp_init_xmit_timers(sk);
@@ -419,10 +417,6 @@ void tcp_init_sock(struct sock *sk)
 	INIT_LIST_HEAD(&tp->tsorted_sent_queue);
 	/* Qizhe: add time queue per request */
 	INIT_LIST_HEAD(&tp->qizhe_time_queue);
-                        list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
-                                element = list_entry(ele_entry, struct qizhe_time_element, entry);
-                                printk("initial %p", element);
-                        }
 	icsk->icsk_rto = TCP_TIMEOUT_INIT;
 	icsk->icsk_rto_min = TCP_RTO_MIN;
 	icsk->icsk_delack_max = TCP_DELACK_MAX;
@@ -1326,7 +1320,8 @@ new_segment:
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		if (sysctl_net_latency_breakdown_on && !sysctl_net_latency_rx_sched_lat_only) {
-			if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0) {
+			if (sk->sk_log_index % sysctl_net_latency_breakdown_log == 0 || 
+			sk->sk_log_index % sysctl_net_latency_breakdown_log == 1) {
 				sk->sk_rcv_skb_ts.read_enter = sk->sk_ts.read_enter;
 				sk->sk_rcv_skb_ts.read_return = sk->sk_ts.read_return;
 				sk->sk_rcv_skb_ts.sleep_enter = sk->sk_ts.sleep_enter;
@@ -1337,6 +1332,7 @@ new_segment:
 				skb->tx_ts.write_enter = sk->sk_ts.write_enter;
 				skb->rx_ts = sk->sk_rcv_skb_ts;
 			}
+			sk->sk_log_index++;
 		}
 #endif
 
@@ -1404,7 +1400,6 @@ new_segment:
 
 		if (!copied)
 			TCP_SKB_CB(skb)->tcp_flags &= ~TCPHDR_PSH;
-
 		WRITE_ONCE(tp->write_seq, tp->write_seq + copy);
 		TCP_SKB_CB(skb)->end_seq += copy;
 		tcp_skb_pcount_set(skb, 0);
@@ -2274,7 +2269,7 @@ found_ok_skb:
 		len -= used;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
                 if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only &&
-			 inet_sk(sk)->inet_saddr == in_aton("192.168.10.125")) {
+			 inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
                         struct qizhe_time_element *element;
 			struct list_head *ele_entry, *safe;
 			list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
@@ -2285,8 +2280,8 @@ found_ok_skb:
 					element->size -= used;
 					if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0) { 
 						trace_printk("[latency-breakdown] source port: %u destination port: %u "
-                                                	"-- rx -rx_sched: %lld \n", be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport), be16_to_cpu(sk->sk_dport),
-                                                        ktime_get_real() - element->time);
+                                                	"-- rx -rx_sched: %lld timestamp: %lld\n", be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport), be16_to_cpu(sk->sk_dport),
+                                                        ktime_get_real() - element->time, ktime_get());
  
 					}	
 				}

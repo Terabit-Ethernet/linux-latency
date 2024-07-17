@@ -1727,6 +1727,9 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 
 	sk = sk_prot_alloc(prot, priority | __GFP_ZERO, family);
 	if (sk) {
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+                sk->sk_log_index = 0;
+#endif
 		sk->sk_family = family;
 		/*
 		 * See comment in struct sock definition to understand
@@ -1884,6 +1887,9 @@ struct sock *sk_clone_lock(const struct sock *sk, const gfp_t priority)
 		bh_lock_sock(newsk);
 		newsk->sk_backlog.head	= newsk->sk_backlog.tail = NULL;
 		newsk->sk_backlog.len = 0;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+                newsk->sk_log_index = 0;
+#endif
 
 		atomic_set(&newsk->sk_rmem_alloc, 0);
 		/*

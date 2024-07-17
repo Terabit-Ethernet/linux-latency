@@ -4952,7 +4952,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPZEROWINDOWDROP);
 			goto out_of_window;
 		}
-		qizhe_len = skb->len;
+		qizhe_len = TCP_SKB_CB(skb)->end_seq -tp->rcv_nxt;
 		/* Ok. In sequence. In window. */
 queue_and_out:
 		if (skb_queue_len(&sk->sk_receive_queue) == 0)
@@ -4989,17 +4989,18 @@ queue_and_out:
 		if (!sock_flag(sk, SOCK_DEAD))
 			tcp_data_ready(sk);
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-		/* Same logic should be added to reorder traffic as well */
+		/* Assume no packet reordering */
 	        if (sysctl_net_latency_breakdown_on  && sysctl_net_latency_rx_sched_lat_only && 
-			inet_sk(sk)->inet_saddr == in_aton("192.168.10.125")) {
+			inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
         	        qizhe_element = kzalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
 			qizhe_element->time = ktime_get_real();
 			qizhe_element->size = qizhe_len;
+			qizhe_element->core = raw_smp_processor_id();
 			if(qizhe_element->size % 64 != 0)
 				WARN_ON(true);
 			INIT_LIST_HEAD(&qizhe_element->entry);
 			list_add_tail(&qizhe_element->entry, &tp->qizhe_time_queue);
-        	}
+		}
 #endif
 		return;
 	}
@@ -5847,7 +5848,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 
 			/* Bulk data transfer: receiver */
 			__skb_pull(skb, tcp_header_len);
-			qizhe_len = skb->len;
+			qizhe_len = TCP_SKB_CB(skb)->end_seq - tp->rcv_nxt;
 			eaten = tcp_queue_rcv(sk, skb, &fragstolen);
 
 			tcp_event_data_recv(sk, skb);
@@ -5871,18 +5872,19 @@ no_ack:
       		        if (sysctl_net_latency_breakdown_on && eaten <= 0) {
                 	        skb->rx_ts.ready = ktime_get_real();
                 	}
-			/* Same logic should be added to reorder traffic as well */
+			/* Assume no packet reordering */
                 	if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only  &&
-                        	inet_sk(sk)->inet_saddr == in_aton("192.168.10.125")) {
+                        	inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
                        		struct qizhe_time_element *qizhe_element;
 				qizhe_element = kzalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
                         	qizhe_element->time = ktime_get_real();
                         	qizhe_element->size = qizhe_len;
+				qizhe_element->core = raw_smp_processor_id();
 				if(qizhe_element->size % 64 != 0)
                                 	WARN_ON(true);
                         	INIT_LIST_HEAD(&qizhe_element->entry);
                         	list_add_tail(&qizhe_element->entry, &tp->qizhe_time_queue);
-                	}
+			}
 #endif
 			return;
 		}
