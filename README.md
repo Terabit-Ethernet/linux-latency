@@ -13,7 +13,11 @@
   make oldconfig
 ```
 
-3. Compile and build the kernel
+3. In `.config`, set `CONFIG_IRQ_TIME_ACCOUNTING=y` to turn on IRQ time accounting for enabling the solution.
+4. In `./net/ipv4/tcp_input.c`, 
+./net/ipv4/tcp_input.c:                        	inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
+./net/ipv4/tcp.c:			 inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {`
+5. Compile and build the kernel
 
 ```
   sudo make -j32 bzImage
@@ -22,7 +26,7 @@
   make install;
 ```
 
-4. Change the default kernel version:
+6. Change the default kernel version:
 
 ```
    sudo vim /etc/default/grub
