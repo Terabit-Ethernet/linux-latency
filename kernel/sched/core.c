@@ -27,6 +27,12 @@
 #include "pelt.h"
 #include "smp.h"
 
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+#include <netian/sysray_sched.h>
+#include <linux/percpu.h>
+DEFINE_PER_CPU(struct sysray_sched_info, sysray_sched_percpu);
+EXPORT_SYMBOL(sysray_sched_percpu);
+#endif
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
  * associated with them) to allow external modules to probe them.
@@ -4420,7 +4426,12 @@ static void __sched notrace __schedule(bool preempt)
 	struct rq_flags rf;
 	struct rq *rq;
 	int cpu;
-
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	struct sysray_sched_info *sinfo;
+	s64 delta;
+	sinfo = this_cpu_ptr(&sysray_sched_percpu);
+	WRITE_ONCE(sinfo->dirty, 0);
+#endif
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
 	prev = rq->curr;
@@ -4451,9 +4462,15 @@ static void __sched notrace __schedule(bool preempt)
 	rq_lock(rq, &rf);
 	smp_mb__after_spinlock();
 
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	sinfo->sched_rq_clock_raw = rq_clock_task(rq);
+#endif
 	/* Promote REQ to ACT */
 	rq->clock_update_flags <<= 1;
 	update_rq_clock(rq);
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	sinfo->sched_rq_clock = rq_clock_task(rq);
+#endif
 
 	switch_count = &prev->nivcsw;
 
@@ -4537,6 +4554,12 @@ static void __sched notrace __schedule(bool preempt)
 	}
 
 	balance_callback(rq);
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	sinfo->sched_exit_rq_clock = READ_ONCE(rq->clock_task);
+	delta = sched_clock_cpu(cpu) - READ_ONCE(rq->clock);
+	sinfo->sched_path_duration = delta > 0? delta: 0;
+	WRITE_ONCE(sinfo->dirty, 1);
+#endif
 }
 
 void __noreturn do_task_dead(void)

@@ -2446,6 +2446,12 @@ config HYPERV_TESTING
 
 endmenu # "Kernel Testing and Coverage"
 
+config SYSRAY_SCHED_INSTR
+	bool "Collect scheduling timestamp for SYSRAY"
+	default y
+	help
+	  Enable extra instrumentation in the scheduler.
+
 source "Documentation/Kconfig"
 
 endmenu # Kernel hacking

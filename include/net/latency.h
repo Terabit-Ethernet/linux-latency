@@ -14,6 +14,7 @@
 
 #include <linux/ktime.h>
 #include <linux/string.h>
+#include <netian/sysray_sched.h>
 #include <uapi/linux/if.h>
 
 /* Standard defines */
@@ -80,10 +81,18 @@ struct sock_timestamps_t {
 
 /* Prints the log of the latency breakdown for a given skb. */
 static inline void latency_breakdown_print_log(unsigned int sport, unsigned int dport, struct rx_timestamps_t rx_ts, struct tx_timestamps_t tx_ts) {
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	struct sysray_sched_info *sinfo;
+	sinfo = this_cpu_ptr(&sysray_sched_percpu);
+#endif
 	trace_printk(
 		"[latency-breakdown] source port: %u destination port: %u "
 		"-- rx -- hw: %lld alloc: %lld irq: %lld napi: %lld gro: %lld ip: %lld tcp: %lld read: %lld sleep: %lld ready: %lld wakeup: %lld data copy: %lld return: %lld "
-		"-- tx -- alloc: %lld write: %lld data copy: %lld tcp: %lld ip: %lld queue: %lld xmit: %lld finish: %lld\n",
+		"-- tx -- alloc: %lld write: %lld data copy: %lld tcp: %lld ip: %lld queue: %lld xmit: %lld finish: %lld "
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+		"-- sched -- t1: %llu t2: %llu t3: %llu t4: %llu d: %u "
+#endif
+		"\n",
 		sport,
 		dport,
 		rx_ts.hw,
@@ -106,7 +115,16 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		tx_ts.ip,
 		tx_ts.queue_xmit,
 		tx_ts.xmit,
-		tx_ts.xmit_finish);
+		tx_ts.xmit_finish
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+		,
+		sinfo->sched_rq_clock_raw,
+		sinfo->sched_rq_clock,
+		sinfo->sched_exit_rq_clock,
+		sinfo->sched_path_duration,
+		sinfo->dirty
+#endif
+	);
 }
 
 #endif	/* _LATENCY_H */
