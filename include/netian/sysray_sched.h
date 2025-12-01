@@ -9,9 +9,12 @@
 struct sysray_sched_info {
 	u64 sched_rq_clock_raw;
 	u64 sched_rq_clock;
+	u64 sched_rq_clock_unupdated;
 	u64 sched_exit_rq_clock;
     u64 sched_path_duration;
+	u32 ivcsw;
 	u32 dirty;
+	u32 sched_rq_clock_update_flags;
 } ____cacheline_aligned;
 
 DECLARE_PER_CPU(struct sysray_sched_info, sysray_sched_percpu);

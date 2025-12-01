@@ -4466,10 +4466,13 @@ static void __sched notrace __schedule(bool preempt)
 	sinfo->sched_rq_clock_raw = rq_clock_task(rq);
 #endif
 	/* Promote REQ to ACT */
-	rq->clock_update_flags <<= 1;
+	// rq->clock_update_flags <<= 1;
+	rq->clock_update_flags = RQCF_UPDATED; // strange idea of me
 	update_rq_clock(rq);
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
 	sinfo->sched_rq_clock = rq_clock_task(rq);
+	sinfo->sched_rq_clock_update_flags = rq->clock_update_flags;
+	sinfo->sched_rq_clock_unupdated = sched_clock_cpu(cpu) - rq_clock(rq);
 #endif
 
 	switch_count = &prev->nivcsw;
@@ -4482,6 +4485,9 @@ static void __sched notrace __schedule(bool preempt)
 	 *  - ptrace_{,un}freeze_traced() can change ->state underneath us.
 	 */
 	prev_state = prev->state;
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	sinfo->ivcsw = !preempt && prev_state;
+#endif
 	if (!preempt && prev_state) {
 		if (signal_pending_state(prev_state, prev)) {
 			prev->state = TASK_RUNNING;

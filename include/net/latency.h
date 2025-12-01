@@ -90,7 +90,7 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		"-- rx -- hw: %lld alloc: %lld irq: %lld napi: %lld gro: %lld ip: %lld tcp: %lld read: %lld sleep: %lld ready: %lld wakeup: %lld data copy: %lld return: %lld "
 		"-- tx -- alloc: %lld write: %lld data copy: %lld tcp: %lld ip: %lld queue: %lld xmit: %lld finish: %lld "
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
-		"-- sched -- t1: %llu t2: %llu t3: %llu t4: %llu d: %u "
+		"-- sched -- t1: %llu t2: %llu t3: %llu t4: %llu t5: %llu i: %u d: %u f: %u "
 #endif
 		"\n",
 		sport,
@@ -120,9 +120,12 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		,
 		sinfo->sched_rq_clock_raw,
 		sinfo->sched_rq_clock,
+		sinfo->sched_rq_clock_unupdated,
 		sinfo->sched_exit_rq_clock,
 		sinfo->sched_path_duration,
-		sinfo->dirty
+		sinfo->ivcsw,
+		sinfo->dirty,
+		sinfo->sched_rq_clock_update_flags
 #endif
 	);
 }
