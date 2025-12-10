@@ -4428,9 +4428,7 @@ static void __sched notrace __schedule(bool preempt)
 	int cpu;
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
 	struct sysray_sched_info *sinfo;
-	s64 delta;
 	sinfo = this_cpu_ptr(&sysray_sched_percpu);
-	WRITE_ONCE(sinfo->dirty, 0);
 #endif
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
@@ -4462,17 +4460,14 @@ static void __sched notrace __schedule(bool preempt)
 	rq_lock(rq, &rf);
 	smp_mb__after_spinlock();
 
-#ifdef CONFIG_SYSRAY_SCHED_INSTR
-	sinfo->sched_rq_clock_raw = rq_clock_task(rq);
-#endif
 	/* Promote REQ to ACT */
-	// rq->clock_update_flags <<= 1;
-	rq->clock_update_flags = RQCF_UPDATED; // strange idea of me
+	rq->clock_update_flags <<= 1;
 	update_rq_clock(rq);
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
-	sinfo->sched_rq_clock = rq_clock_task(rq);
+	sinfo->sched_rq_clock_start = rq_clock(rq);
+	sinfo->sched_rq_clock_task_start = rq_clock_task(rq);
 	sinfo->sched_rq_clock_update_flags = rq->clock_update_flags;
-	sinfo->sched_rq_clock_unupdated = sched_clock_cpu(cpu) - rq_clock(rq);
+	sinfo->sched_enter = sched_clock_cpu(cpu);
 #endif
 
 	switch_count = &prev->nivcsw;
@@ -4486,7 +4481,7 @@ static void __sched notrace __schedule(bool preempt)
 	 */
 	prev_state = prev->state;
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
-	sinfo->ivcsw = !preempt && prev_state;
+	sinfo->sched_preempted = !preempt && prev_state;
 #endif
 	if (!preempt && prev_state) {
 		if (signal_pending_state(prev_state, prev)) {
@@ -4552,19 +4547,24 @@ static void __sched notrace __schedule(bool preempt)
 
 		trace_sched_switch(preempt, prev, next);
 
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+		sinfo->sched_middle = sched_clock_cpu(cpu);
+#endif
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+		sinfo->sched_middle = sched_clock_cpu(cpu);
+#endif
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 		rq_unlock_irq(rq, &rf);
 	}
 
 	balance_callback(rq);
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
-	sinfo->sched_exit_rq_clock = READ_ONCE(rq->clock_task);
-	delta = sched_clock_cpu(cpu) - READ_ONCE(rq->clock);
-	sinfo->sched_path_duration = delta > 0? delta: 0;
-	WRITE_ONCE(sinfo->dirty, 1);
+	sinfo->sched_rq_clock_end = READ_ONCE(rq->clock);
+	sinfo->sched_rq_clock_task_end = READ_ONCE(rq->clock_task);
+	sinfo->sched_exit = sched_clock_cpu(cpu);
 #endif
 }
 

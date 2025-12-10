@@ -90,7 +90,7 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		"-- rx -- hw: %lld alloc: %lld irq: %lld napi: %lld gro: %lld ip: %lld tcp: %lld read: %lld sleep: %lld ready: %lld wakeup: %lld data copy: %lld return: %lld "
 		"-- tx -- alloc: %lld write: %lld data copy: %lld tcp: %lld ip: %lld queue: %lld xmit: %lld finish: %lld "
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
-		"-- sched -- t1: %llu t2: %llu t3: %llu t4: %llu t5: %llu i: %u d: %u f: %u "
+		"-- sched -- t1: %lld t2: %lld t3: %lld t4: %lld t5: %lld t6: %lld t7: %lld p: %u f: %u "
 #endif
 		"\n",
 		sport,
@@ -118,13 +118,14 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		tx_ts.xmit_finish
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
 		,
-		sinfo->sched_rq_clock_raw,
-		sinfo->sched_rq_clock,
-		sinfo->sched_rq_clock_unupdated,
-		sinfo->sched_exit_rq_clock,
-		sinfo->sched_path_duration,
-		sinfo->ivcsw,
-		sinfo->dirty,
+		sinfo->sched_rq_clock_start,
+		sinfo->sched_rq_clock_end,
+		sinfo->sched_rq_clock_task_start,
+		sinfo->sched_rq_clock_task_end,
+		sinfo->sched_enter,
+		sinfo->sched_middle,
+		sinfo->sched_exit,
+		sinfo->sched_preempted,
 		sinfo->sched_rq_clock_update_flags
 #endif
 	);

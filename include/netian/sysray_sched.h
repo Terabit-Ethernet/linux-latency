@@ -7,13 +7,14 @@
 #include <linux/cache.h>
 
 struct sysray_sched_info {
-	u64 sched_rq_clock_raw;
-	u64 sched_rq_clock;
-	u64 sched_rq_clock_unupdated;
-	u64 sched_exit_rq_clock;
-    u64 sched_path_duration;
-	u32 ivcsw;
-	u32 dirty;
+	u64 sched_rq_clock_start;
+	u64 sched_rq_clock_end;
+	u64 sched_rq_clock_task_start;
+	u64 sched_rq_clock_task_end;
+	u64 sched_enter;
+	u64 sched_middle;
+	u64 sched_exit;
+	u32 sched_preempted;
 	u32 sched_rq_clock_update_flags;
 } ____cacheline_aligned;
 
