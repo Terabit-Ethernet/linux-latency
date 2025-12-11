@@ -3593,6 +3593,17 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	struct mm_struct *mm = rq->prev_mm;
 	long prev_state;
 
+	/* Update the clock with the freshest possible timestamp */
+	update_rq_clock(rq);
+
+	/* * Reset exec_start to NOW. 
+	 * This prevents the context switch latency (and any time spent 
+	 * in the schedule() loop) from being counted as this task's runtime.
+	 */
+	if (current->sched_class == &fair_sched_class) {
+		current->se.exec_start = rq_clock_task(rq);
+	}
+
 	/*
 	 * The previous task will have left us with a preempt_count of 2
 	 * because it left us after:
@@ -4556,6 +4567,12 @@ static void __sched notrace __schedule(bool preempt)
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
 		sinfo->sched_middle = sched_clock_cpu(cpu);
 #endif
+
+		update_rq_clock(rq);
+        if (prev->sched_class == &fair_sched_class) {
+            prev->se.exec_start = rq_clock_task(rq);
+        }
+
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 		rq_unlock_irq(rq, &rf);
 	}
