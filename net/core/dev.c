@@ -146,6 +146,9 @@
 #include <net/devlink.h>
 #include <linux/pm_runtime.h>
 #include <linux/prandom.h>
+#include <linux/smp.h>
+#include <linux/kernel_stat.h>
+#include <linux/percpu.h>
 
 #include "net-sysfs.h"
 
@@ -4082,10 +4085,23 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	struct Qdisc *q;
 	int rc = -ENOMEM;
 	bool again = false;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 new_irqtime;
+#endif
+#endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on && skb->sport) {
 		skb->tx_ts.queue_xmit = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
+			      kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+		if (unlikely(new_irqtime != this_cpu_read(latency_last_irqtime))) {
+			LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_IP_PROC_INVALID);
+		}
+		this_cpu_write(latency_last_irqtime, new_irqtime);
+#endif
 	}
 #endif
 

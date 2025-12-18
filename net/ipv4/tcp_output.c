@@ -45,6 +45,9 @@
 #include <linux/module.h>
 #include <linux/static_key.h>
 #include <linux/inet.h>
+#include <linux/smp.h>
+#include <linux/kernel_stat.h>
+#include <linux/percpu.h>
 #include <trace/events/tcp.h>
 
 /* Refresh clocks of a TCP socket,
@@ -2664,6 +2667,11 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 	int result;
 	bool is_cwnd_limited = false, is_rwnd_limited = false;
 	u32 max_segs;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 new_irqtime;
+#endif
+#endif
 
 	sent_pkts = 0;
 
@@ -2685,6 +2693,14 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		if (sysctl_net_latency_breakdown_on && skb->sport) {
 			skb->tx_ts.tcp = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+			new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
+				kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+		if (unlikely(new_irqtime != this_cpu_read(latency_last_irqtime))) {
+			LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_DATA_COPY_INVALID);
+		}
+		this_cpu_write(latency_last_irqtime, new_irqtime);
+#endif
 		}
 #endif
 

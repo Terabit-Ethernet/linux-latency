@@ -82,6 +82,9 @@
 #include <linux/netfilter_bridge.h>
 #include <linux/netlink.h>
 #include <linux/tcp.h>
+#include <linux/smp.h>
+#include <linux/kernel_stat.h>
+#include <linux/percpu.h>
 
 static int
 ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
@@ -460,10 +463,23 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	struct rtable *rt;
 	struct iphdr *iph;
 	int res;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 new_irqtime;
+#endif
+#endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on && skb->sport) {
 		skb->tx_ts.ip = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
+			       kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+		if (unlikely(new_irqtime != this_cpu_read(latency_last_irqtime))) {
+			LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_TCP_PROC_INVALID);
+		}
+		this_cpu_write(latency_last_irqtime, new_irqtime);
+#endif
 	}
 #endif
 

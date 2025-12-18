@@ -38,3 +38,8 @@ EXPORT_SYMBOL(latency_breakdown_irq_ts);
 
 ktime_t latency_breakdown_napi_ts[CONFIG_NR_CPUS];
 EXPORT_SYMBOL(latency_breakdown_napi_ts);
+
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+DEFINE_PER_CPU(u64, latency_last_irqtime);
+EXPORT_PER_CPU_SYMBOL(latency_last_irqtime);
+#endif

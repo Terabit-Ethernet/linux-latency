@@ -268,6 +268,9 @@
 #include <linux/errqueue.h>
 #include <linux/static_key.h>
 #include <linux/inet.h>
+#include <linux/smp.h>
+#include <linux/kernel_stat.h>
+#include <linux/percpu.h>
 #include <net/icmp.h>
 #include <net/inet_common.h>
 #include <net/tcp.h>
@@ -1330,6 +1333,9 @@ new_segment:
 				skb->dport = be16_to_cpu(sk->sk_dport);
 				skb->sport = be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport);
 				skb->tx_ts.write_enter = sk->sk_ts.write_enter;
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+				skb->tx_ts.valid = sk->sk_ts.valid;
+#endif
 				skb->rx_ts = sk->sk_rcv_skb_ts;
 			}
 			sk->sk_log_index++;
@@ -1465,10 +1471,23 @@ EXPORT_SYMBOL_GPL(tcp_sendmsg_locked);
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 {
 	int ret;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 new_irqtime;
+#endif
+#endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
 		sk->sk_ts.write_enter = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
+			       kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+		if (unlikely(new_irqtime != this_cpu_read(latency_last_irqtime))) {
+			LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_APPLICATION_INVALID);
+		}
+		this_cpu_write(latency_last_irqtime, new_irqtime);		
+#endif
 	}
 #endif
 
@@ -2060,6 +2079,9 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	struct scm_timestamping_internal tss;
 	int cmsg_flags;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 new_irqtime;
+#endif
 	if (sysctl_net_latency_breakdown_on) {
 		sk->sk_ts.read_enter = ktime_get_real();
 	}
@@ -2202,6 +2224,16 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
 				sk->sk_ts.sleep_enter = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+				sk->sk_ts.valid = 0; // later transfered to skb->tx_ts.valid
+				new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
+			       kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+				if (unlikely(new_irqtime != this_cpu_read(latency_last_irqtime))) {
+					LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_INVALID);
+				}
+				// no need to update latency_last_irqtime here, it will synced
+				// when rx_data_copy is recorded later.
+#endif
 			}
 #endif
 
@@ -2252,6 +2284,11 @@ found_ok_skb:
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
 				skb->rx_ts.data_copy = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+				new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
+					kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+				this_cpu_write(latency_last_irqtime, new_irqtime);
+#endif
 			}
 #endif
 
@@ -2350,6 +2387,14 @@ found_fin_ok:
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
 		sk->sk_ts.read_return = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
+			       kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+		if (unlikely(new_irqtime != this_cpu_read(latency_last_irqtime))) {
+			LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_RX_DATA_COPY_INVALID);
+		}
+		this_cpu_write(latency_last_irqtime, new_irqtime);
+#endif
 	}
 #endif
 

@@ -35,6 +35,58 @@ extern unsigned int sysctl_net_latency_req_size;
 extern ktime_t latency_breakdown_irq_ts[];
 extern ktime_t latency_breakdown_napi_ts[];
 
+/* Clean runtime capture 
+ * This functionality relies on irq time accounting to judge if interrupted.
+ */
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+
+/*
+ * Conceptually, there is not a case when one thread update the per-cpu last
+ * IRQ time record and schedule to another thread's timestamping logic without
+ * involved in interrupt (tick is also an interrupt). So there is no need to
+ * build per-sock last IRQ time record.
+ */
+DECLARE_PER_CPU(u64, latency_last_irqtime);
+
+/*
+ * STAGE_HIDDEN_APP: tx_xmit_finish to rx_sleep_enter
+ * 		This stage doesn't show up in end-to-end latency, but it does contribute
+ * 		significantly to the overall CPU utilization (runtime). It is also the
+ * 		major part when the threads is interrupted (or handle bottom half).
+ * STAGE_RX_DATA_COPY: rx_data_copy to rx_read_return
+ * STAGE_APPLICATION: rx_read_return to tx_write_enter
+ * STAGE_TX_DATA_COPY: tx_data_copy to tx_tcp
+ * STAGE_TX_TCP_PROC: tx_tcp to tx_ip
+ * STAGE_TX_IP_PROC: tx_ip to tx_queue_xmit
+ * STAGE_TX_QUEUE: tx_queue_xmit to tx_xmit
+ * STAGE_TX_XMIT: tx_xmit to tx_xmit_finish
+ */
+enum stage_invalid_bit {
+	STAGE_HIDDEN_APP_BIT = 0,
+    STAGE_RX_DATA_COPY_BIT,
+    STAGE_APPLICATION_BIT,
+    STAGE_TX_DATA_COPY_BIT,
+    STAGE_TX_TCP_PROC_BIT,
+    STAGE_TX_IP_PROC_BIT,
+    STAGE_TX_QUEUE_BIT,
+    STAGE_TX_XMIT_BIT,
+    STAGE_INVALID_BIT_MAX
+};
+
+#define STAGE_HIDDEN_APP_INVALID 	(1ULL << STAGE_HIDDEN_APP_BIT)
+#define STAGE_RX_DATA_COPY_INVALID  (1ULL << STAGE_RX_DATA_COPY_BIT)
+#define STAGE_APPLICATION_INVALID   (1ULL << STAGE_APPLICATION_BIT)
+#define STAGE_TX_DATA_COPY_INVALID  (1ULL << STAGE_TX_DATA_COPY_BIT)
+#define STAGE_TX_TCP_PROC_INVALID   (1ULL << STAGE_TX_TCP_PROC_BIT)
+#define STAGE_TX_IP_PROC_INVALID    (1ULL << STAGE_TX_IP_PROC_BIT)
+#define STAGE_TX_QUEUE_INVALID      (1ULL << STAGE_TX_QUEUE_BIT)
+#define STAGE_TX_XMIT_INVALID       (1ULL << STAGE_TX_XMIT_BIT)
+
+#define LATENCY_STAGE_MARK_INVALID(mask, stage) \
+    ((mask) |= (stage))
+
+#endif
+
 /* Receive data path timestamps for a single skb. */
 struct rx_timestamps_t {
 	/* We're including NIC Rx hardware timestamp
@@ -67,6 +119,9 @@ struct tx_timestamps_t {
 	ktime_t	queue_xmit;
 	ktime_t xmit;
 	ktime_t	xmit_finish;
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 valid;
+#endif
 };
 
 /* Per-socket specific timestamps. */
@@ -77,6 +132,9 @@ struct sock_timestamps_t {
 	ktime_t	sleep_enter;
 	ktime_t	ready;
 	ktime_t	wake_up;
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 valid;
+#endif
 };
 
 /* Prints the log of the latency breakdown for a given skb. */
@@ -91,6 +149,9 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		"-- tx -- alloc: %lld write: %lld data copy: %lld tcp: %lld ip: %lld queue: %lld xmit: %lld finish: %lld "
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
 		"-- sched -- t1: %lld t2: %lld t3: %lld t4: %lld t5: %lld t6: %lld t7: %lld p: %u f: %u "
+#endif
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		"-- valid: %llu"
 #endif
 		"\n",
 		sport,
@@ -127,6 +188,10 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		sinfo->sched_exit,
 		sinfo->sched_preempted,
 		sinfo->sched_rq_clock_update_flags
+#endif
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		,
+		tx_ts.valid
 #endif
 	);
 }
