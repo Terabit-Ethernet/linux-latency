@@ -52,6 +52,10 @@ static int accu_irq_accounting __read_mostly;
 module_param(accu_irq_accounting, int, 0644);
 MODULE_PARM_DESC(accu_irq_accounting, "accurate irq accounting");
 
+static int scheduler_accounting __read_mostly;
+module_param(scheduler_accounting, int, 0644);
+MODULE_PARM_DESC(scheduler_accounting, "scheduler accounting");
+
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
 #ifdef CONFIG_SCHED_DEBUG
@@ -3593,15 +3597,11 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	struct mm_struct *mm = rq->prev_mm;
 	long prev_state;
 
-	/* Update the clock with the freshest possible timestamp */
-	update_rq_clock(rq);
-
-	/* * Reset exec_start to NOW. 
-	 * This prevents the context switch latency (and any time spent 
-	 * in the schedule() loop) from being counted as this task's runtime.
-	 */
-	if (current->sched_class == &fair_sched_class) {
-		current->se.exec_start = rq_clock_task(rq);
+	if (scheduler_accounting) {
+		if (current->sched_class == &fair_sched_class) {
+			update_rq_clock(rq);
+			current->se.exec_start = rq_clock_task(rq);
+		}
 	}
 
 	/*
@@ -4567,10 +4567,11 @@ static void __sched notrace __schedule(bool preempt)
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
 		sinfo->sched_middle = sched_clock_cpu(cpu);
 #endif
-
-		update_rq_clock(rq);
-        if (prev->sched_class == &fair_sched_class) {
-            prev->se.exec_start = rq_clock_task(rq);
+		if (scheduler_accounting) {
+			if (prev->sched_class == &fair_sched_class) {
+				update_rq_clock(rq);
+				prev->se.exec_start = rq_clock_task(rq);
+			}
         }
 
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
