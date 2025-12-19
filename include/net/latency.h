@@ -30,6 +30,7 @@ extern unsigned int sysctl_net_latency_breakdown_log_min;
 extern unsigned int sysctl_net_latency_breakdown_nrfs;
 extern unsigned int sysctl_net_latency_rx_sched_lat_only;
 extern unsigned int sysctl_net_latency_req_size;
+extern unsigned int sysctl_net_latency_breakdown_validation;
 
 /* Per-CPU variables for measurements. */
 extern ktime_t latency_breakdown_irq_ts[];
@@ -39,14 +40,6 @@ extern ktime_t latency_breakdown_napi_ts[];
  * This functionality relies on irq time accounting to judge if interrupted.
  */
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-
-/*
- * Conceptually, there is not a case when one thread update the per-cpu last
- * IRQ time record and schedule to another thread's timestamping logic without
- * involved in interrupt (tick is also an interrupt). So there is no need to
- * build per-sock last IRQ time record.
- */
-DECLARE_PER_CPU(u64, latency_last_irqtime);
 
 /*
  * STAGE_HIDDEN_APP: tx_xmit_finish to rx_sleep_enter
@@ -120,6 +113,7 @@ struct tx_timestamps_t {
 	ktime_t xmit;
 	ktime_t	xmit_finish;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 last_irqtime;
 	u64 valid;
 #endif
 };
@@ -133,6 +127,7 @@ struct sock_timestamps_t {
 	ktime_t	ready;
 	ktime_t	wake_up;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 last_irqtime;
 	u64 valid;
 #endif
 };
