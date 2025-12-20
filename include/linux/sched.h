@@ -65,6 +65,10 @@ struct task_delay_info;
 struct task_group;
 struct io_uring_task;
 
+#ifdef CONFIG_IRQ_TIME_ACCOUNTING
+extern u64 public_irq_time_read(int cpu);
+#endif
+
 /*
  * Task state bitmask. NOTE! These bits are also
  * encoded in fs/proc/array.c: get_task_state().

@@ -49,6 +49,7 @@
 #include <linux/kernel_stat.h>
 #include <linux/percpu.h>
 #include <trace/events/tcp.h>
+#include <linux/sched.h>
 
 /* Refresh clocks of a TCP socket,
  * ensuring monotically increasing values.
@@ -2695,8 +2696,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 			skb->tx_ts.tcp = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 			if (sysctl_net_latency_breakdown_validation) {
-				new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
-						kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+				new_irqtime = public_irq_time_read(smp_processor_id());
 				if (unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
 					LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_DATA_COPY_INVALID);
 				}

@@ -85,6 +85,7 @@
 #include <linux/smp.h>
 #include <linux/kernel_stat.h>
 #include <linux/percpu.h>
+#include <linux/sched.h>
 
 static int
 ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
@@ -474,8 +475,7 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 		skb->tx_ts.ip = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
-			new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
-			       kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+			new_irqtime = public_irq_time_read(smp_processor_id());
 			if (unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_TCP_PROC_INVALID);
 			}

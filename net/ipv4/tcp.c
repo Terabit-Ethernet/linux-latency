@@ -270,6 +270,7 @@
 #include <linux/inet.h>
 #include <linux/smp.h>
 #include <linux/kernel_stat.h>
+#include <linux/sched.h>
 #include <net/icmp.h>
 #include <net/inet_common.h>
 #include <net/tcp.h>
@@ -1483,8 +1484,7 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 		sk->sk_ts.write_enter = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
-			new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
-			       kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+			new_irqtime = public_irq_time_read(smp_processor_id());
 			if (unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_APPLICATION_INVALID);
 			}
@@ -2230,8 +2230,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 				if (sysctl_net_latency_breakdown_validation) {
 					WRITE_ONCE(sk->sk_ts.valid, 0); // later transfered to skb->tx_ts.valid
-					new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
-							kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+					new_irqtime = public_irq_time_read(smp_processor_id());
 					// read last_irqtime written by last `mlx5e_txwqe_complete` call
 					if (unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
 						LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_INVALID);
@@ -2290,8 +2289,7 @@ found_ok_skb:
 				skb->rx_ts.data_copy = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 				if (sysctl_net_latency_breakdown_validation) {
-					new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
-						kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+					new_irqtime = public_irq_time_read(smp_processor_id());
 					// we are currently in rx path so record first last_irqtime in sock.
 					WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
 				}
@@ -2399,8 +2397,7 @@ found_fin_ok:
 		sk->sk_ts.read_return = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
-			new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
-			       kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+			new_irqtime = public_irq_time_read(smp_processor_id());
 			if (unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_RX_DATA_COPY_INVALID);
 			}

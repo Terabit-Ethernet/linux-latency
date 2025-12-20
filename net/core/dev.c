@@ -4096,8 +4096,7 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 		skb->tx_ts.queue_xmit = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
-			new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
-					kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+			new_irqtime = public_irq_time_read(smp_processor_id());
 			if (unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_IP_PROC_INVALID);
 			}

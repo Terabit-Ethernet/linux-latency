@@ -3,6 +3,7 @@
  * Simple CPU accounting cgroup controller
  */
 #include "sched.h"
+#include <linux/export.h>
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
 
@@ -18,6 +19,25 @@
  * compromise in place of having locks on each irq in account_system_time.
  */
 DEFINE_PER_CPU(struct irqtime, cpu_irqtime);
+EXPORT_PER_CPU_SYMBOL(cpu_irqtime);
+
+u64 public_irq_time_read(int cpu)
+{
+	/* The compiler now has the full definition of irqtime 
+       and the sync macros from u64_stats_sync.h 
+    */
+	struct irqtime *irqtime = &per_cpu(cpu_irqtime, cpu);
+	unsigned int seq;
+	u64 total;
+
+	do {
+		seq = __u64_stats_fetch_begin(&irqtime->sync);
+		total = irqtime->total;
+	} while (__u64_stats_fetch_retry(&irqtime->sync, seq));
+
+	return total;
+}
+EXPORT_SYMBOL_GPL(public_irq_time_read);
 
 static int sched_clock_irqtime;
 

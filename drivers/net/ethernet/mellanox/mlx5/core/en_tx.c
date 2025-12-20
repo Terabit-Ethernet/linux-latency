@@ -34,6 +34,7 @@
 #include <linux/if_vlan.h>
 #include <linux/smp.h>
 #include <linux/kernel_stat.h>
+#include <linux/sched.h>
 #include <net/geneve.h>
 #include <net/dsfield.h>
 #include "en.h"
@@ -418,9 +419,8 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		skb->tx_ts.xmit_finish = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
-			// read new irqtime from cpu_stat
-			new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
-			       kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+			// read new irqtime via public_irq_time_read
+			new_irqtime = public_irq_time_read(smp_processor_id());
 			// for stage tx_xmit, if new irqtime != last irq time in skb->tx_ts, 
 			// we need to mark invalid for correctly printing skb->tx_ts.valid.
 			if (unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
@@ -675,8 +675,7 @@ netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev)
 		skb->tx_ts.xmit = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
-			new_irqtime = kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_IRQ] + 
-			      kcpustat_cpu(raw_smp_processor_id()).cpustat[CPUTIME_SOFTIRQ];
+			new_irqtime = public_irq_time_read(smp_processor_id());
 			if (unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_QUEUE_INVALID);
 			}
