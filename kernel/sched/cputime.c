@@ -23,19 +23,11 @@ EXPORT_PER_CPU_SYMBOL(cpu_irqtime);
 
 u64 public_irq_time_read(int cpu)
 {
-	/* The compiler now has the full definition of irqtime 
-       and the sync macros from u64_stats_sync.h 
-    */
+	// Maybe we need a more radical approach for so called irq time.
 	struct irqtime *irqtime = &per_cpu(cpu_irqtime, cpu);
-	unsigned int seq;
-	u64 total;
-
-	do {
-		seq = __u64_stats_fetch_begin(&irqtime->sync);
-		total = irqtime->total;
-	} while (__u64_stats_fetch_retry(&irqtime->sync, seq));
-
-	return total;
+	u64 irq_start_time;
+	irq_start_time = irqtime->irq_start_time;
+	return irq_start_time;
 }
 EXPORT_SYMBOL_GPL(public_irq_time_read);
 

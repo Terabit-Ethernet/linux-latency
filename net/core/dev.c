@@ -149,6 +149,7 @@
 #include <linux/smp.h>
 #include <linux/kernel_stat.h>
 #include <linux/percpu.h>
+#include <linux/irqflags.h>
 
 #include "net-sysfs.h"
 
@@ -4088,21 +4089,27 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 new_irqtime;
+	unsigned long flags;
 #endif
 #endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on && skb->sport) {
-		skb->tx_ts.queue_xmit = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(flags);
+			skb->tx_ts.queue_xmit = ktime_get_real();
 			new_irqtime = public_irq_time_read(smp_processor_id());
-			if (unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
+			local_irq_restore(flags);
+			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_IP_PROC_INVALID);
 			}
 			WRITE_ONCE(skb->tx_ts.last_irqtime, new_irqtime);
-		}
+		} else
 #endif
+		{
+			skb->tx_ts.queue_xmit = ktime_get_real();
+		}
 	}
 #endif
 

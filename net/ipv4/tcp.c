@@ -278,6 +278,7 @@
 #include <net/xfrm.h>
 #include <net/ip.h>
 #include <net/sock.h>
+#include <linux/irqflags.h>
 
 #include <linux/uaccess.h>
 #include <asm/ioctls.h>
@@ -1476,21 +1477,27 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 new_irqtime;
+	unsigned long flags;
 #endif
 #endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
-		sk->sk_ts.write_enter = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(flags);
+			sk->sk_ts.write_enter = ktime_get_real();
 			new_irqtime = public_irq_time_read(smp_processor_id());
-			if (unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
+			local_irq_restore(flags);
+			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_APPLICATION_INVALID);
 			}
 			WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
-		}
+		} else
 #endif
+		{
+			sk->sk_ts.write_enter = ktime_get_real();
+		}
 	}
 #endif
 
@@ -2084,6 +2091,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 new_irqtime;
+	unsigned long irq_flags;
 #endif
 	if (sysctl_net_latency_breakdown_on) {
 		sk->sk_ts.read_enter = ktime_get_real();
@@ -2226,17 +2234,22 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		} else {
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
-				sk->sk_ts.sleep_enter = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 				if (sysctl_net_latency_breakdown_validation) {
-					WRITE_ONCE(sk->sk_ts.valid, 0); // later transfered to skb->tx_ts.valid
+					local_irq_save(irq_flags);
+					sk->sk_ts.sleep_enter = ktime_get_real();
 					new_irqtime = public_irq_time_read(smp_processor_id());
+					local_irq_restore(irq_flags);
+					WRITE_ONCE(sk->sk_ts.valid, 0); // later transfered to skb->tx_ts.valid
 					// read last_irqtime written by last `mlx5e_txwqe_complete` call
-					if (unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
+					if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
 						LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_INVALID);
 					}
-				}
+				} else
 #endif
+				{
+					sk->sk_ts.sleep_enter = ktime_get_real();
+				}
 			}
 #endif
 
@@ -2286,14 +2299,19 @@ found_ok_skb:
 		if (!(flags & MSG_TRUNC)) {
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
-				skb->rx_ts.data_copy = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 				if (sysctl_net_latency_breakdown_validation) {
+					local_irq_save(irq_flags);
+					skb->rx_ts.data_copy = ktime_get_real();
 					new_irqtime = public_irq_time_read(smp_processor_id());
+					local_irq_restore(irq_flags);
 					// we are currently in rx path so record first last_irqtime in sock.
 					WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
-				}
+				} else
 #endif
+				{
+					skb->rx_ts.data_copy = ktime_get_real();
+				}
 			}
 #endif
 
@@ -2394,16 +2412,21 @@ found_fin_ok:
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
-		sk->sk_ts.read_return = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(irq_flags);
+			sk->sk_ts.read_return = ktime_get_real();
 			new_irqtime = public_irq_time_read(smp_processor_id());
-			if (unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
+			local_irq_restore(irq_flags);
+			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_RX_DATA_COPY_INVALID);
 			}
 			WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
-		}
+		} else 
 #endif
+		{
+			sk->sk_ts.read_return = ktime_get_real();
+		}
 	}
 #endif
 

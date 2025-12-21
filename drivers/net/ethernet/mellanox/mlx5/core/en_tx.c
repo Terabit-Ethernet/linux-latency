@@ -35,6 +35,7 @@
 #include <linux/smp.h>
 #include <linux/kernel_stat.h>
 #include <linux/sched.h>
+#include <linux/irqflags.h>
 #include <net/geneve.h>
 #include <net/dsfield.h>
 #include "en.h"
@@ -42,6 +43,7 @@
 #include "ipoib/ipoib.h"
 #include "en_accel/en_accel.h"
 #include "lib/clock.h"
+
 
 static void mlx5e_dma_unmap_wqe_err(struct mlx5e_txqsq *sq, u8 num_dma)
 {
@@ -390,6 +392,7 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 new_irqtime;
+	unsigned long flags;
 #endif
 #endif
 
@@ -416,22 +419,26 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on && skb->sport) {
-		skb->tx_ts.xmit_finish = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
-			// read new irqtime via public_irq_time_read
+			local_irq_save(flags);
+			skb->tx_ts.xmit_finish = ktime_get_real();
 			new_irqtime = public_irq_time_read(smp_processor_id());
+			local_irq_restore(flags);
 			// for stage tx_xmit, if new irqtime != last irq time in skb->tx_ts, 
 			// we need to mark invalid for correctly printing skb->tx_ts.valid.
-			if (unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
+			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_XMIT_INVALID);
 			}
 			// we write back new irqtime to sock's timestamp, for next packet!
 			if (skb->sk) {
 				WRITE_ONCE(skb->sk->sk_ts.last_irqtime, new_irqtime);
 			}
-		}
+		} else
 #endif
+		{
+			skb->tx_ts.xmit_finish = ktime_get_real();
+		}
 		latency_breakdown_print_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
 	}
 #endif
@@ -667,21 +674,27 @@ netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev)
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 new_irqtime;
+	unsigned long flags;
 #endif
 #endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on && skb->sport) {
-		skb->tx_ts.xmit = ktime_get_real();
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(flags);
+			skb->tx_ts.xmit = ktime_get_real();
 			new_irqtime = public_irq_time_read(smp_processor_id());
-			if (unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
+			local_irq_restore(flags);
+			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
 				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_QUEUE_INVALID);
 			}
 			WRITE_ONCE(skb->tx_ts.last_irqtime, new_irqtime);
-		}
+		} else
 #endif
+		{
+			skb->tx_ts.xmit = ktime_get_real();
+		}
 	}
 #endif
 
