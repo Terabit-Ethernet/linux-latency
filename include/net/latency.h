@@ -113,6 +113,8 @@ struct tx_timestamps_t {
 	ktime_t xmit;
 	ktime_t	xmit_finish;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	ktime_t last_xmit_finish;
+	u64 last_csw;
 	u64 last_irqtime;
 	u64 valid;
 #endif
@@ -127,6 +129,8 @@ struct sock_timestamps_t {
 	ktime_t	ready;
 	ktime_t	wake_up;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	ktime_t last_xmit_finish;
+	u64 last_csw;
 	u64 last_irqtime;
 	u64 valid;
 #endif
@@ -146,7 +150,7 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		"-- sched -- t1: %lld t2: %lld t3: %lld t4: %lld t5: %lld t6: %lld t7: %lld p: %u f: %u "
 #endif
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-		"-- valid: %llu"
+		"-- last_xmit_finish: %lld valid: %llu"
 #endif
 		"\n",
 		sport,
@@ -186,6 +190,7 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 #endif
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		,
+		tx_ts.last_xmit_finish,
 		tx_ts.valid
 #endif
 	);

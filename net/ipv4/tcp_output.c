@@ -2672,6 +2672,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 new_irqtime;
+	u64 new_csw;
 	unsigned long flags;
 #endif
 #endif
@@ -2700,11 +2701,14 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 				local_irq_save(flags);
 				skb->tx_ts.tcp = ktime_get_real();
 				new_irqtime = public_irq_time_read(smp_processor_id());
+				new_csw = current->nvcsw + current->nivcsw;
 				local_irq_restore(flags);
-				if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
+				if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime)) || 
+				    unlikely(new_csw != READ_ONCE(skb->tx_ts.last_csw))) {
 					LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_DATA_COPY_INVALID);
 				}
 				WRITE_ONCE(skb->tx_ts.last_irqtime, new_irqtime);
+				WRITE_ONCE(skb->tx_ts.last_csw, new_csw);
 			} else
 #endif
 			{

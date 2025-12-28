@@ -4089,6 +4089,7 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 new_irqtime;
+	u64 new_csw;
 	unsigned long flags;
 #endif
 #endif
@@ -4100,11 +4101,14 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 			local_irq_save(flags);
 			skb->tx_ts.queue_xmit = ktime_get_real();
 			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nvcsw + current->nivcsw;
 			local_irq_restore(flags);
-			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime))) {
+			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime)) ||
+				unlikely(new_csw != READ_ONCE(skb->tx_ts.last_csw))) {
 				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_IP_PROC_INVALID);
 			}
 			WRITE_ONCE(skb->tx_ts.last_irqtime, new_irqtime);
+			WRITE_ONCE(skb->tx_ts.last_csw, new_csw);
 		} else
 #endif
 		{

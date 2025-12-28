@@ -1336,6 +1336,8 @@ new_segment:
 				skb->tx_ts.write_enter = sk->sk_ts.write_enter;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 				// copy valid bitmap and last_irqtime stamp to new tx skb
+				skb->tx_ts.last_xmit_finish = sk->sk_ts.last_xmit_finish;
+				skb->tx_ts.last_csw = sk->sk_ts.last_csw;
 				skb->tx_ts.last_irqtime = sk->sk_ts.last_irqtime;
 				skb->tx_ts.valid = sk->sk_ts.valid;
 #endif
@@ -1477,6 +1479,7 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 new_irqtime;
+	u64 new_csw;
 	unsigned long flags;
 #endif
 #endif
@@ -1488,11 +1491,14 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 			local_irq_save(flags);
 			sk->sk_ts.write_enter = ktime_get_real();
 			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nivcsw + current->nvcsw;
 			local_irq_restore(flags);
-			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
+			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime)) ||
+			    unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
 				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_APPLICATION_INVALID);
 			}
 			WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
+			WRITE_ONCE(sk->sk_ts.last_csw, new_csw);
 		} else
 #endif
 		{
@@ -2091,6 +2097,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 new_irqtime;
+	u64 new_csw;
 	unsigned long irq_flags;
 #endif
 	if (sysctl_net_latency_breakdown_on) {
@@ -2239,10 +2246,12 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 					local_irq_save(irq_flags);
 					sk->sk_ts.sleep_enter = ktime_get_real();
 					new_irqtime = public_irq_time_read(smp_processor_id());
+					new_csw = current->nvcsw + current->nivcsw;
 					local_irq_restore(irq_flags);
 					WRITE_ONCE(sk->sk_ts.valid, 0); // later transfered to skb->tx_ts.valid
 					// read last_irqtime written by last `mlx5e_txwqe_complete` call
-					if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
+					if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime)) || 
+						unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
 						LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_INVALID);
 					}
 				} else
@@ -2257,7 +2266,20 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
-				sk->sk_ts.wake_up = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+				if (sysctl_net_latency_breakdown_validation) {
+					local_irq_save(irq_flags);
+					sk->sk_ts.wake_up = ktime_get_real();
+					new_irqtime = public_irq_time_read(smp_processor_id());
+					new_csw = current->nvcsw + current->nivcsw;
+					local_irq_restore(irq_flags);
+					WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
+					WRITE_ONCE(sk->sk_ts.last_csw, new_csw);
+				} else
+#endif
+				{
+					sk->sk_ts.wake_up = ktime_get_real();
+				}
 			}
 #endif
 		}
@@ -2299,19 +2321,7 @@ found_ok_skb:
 		if (!(flags & MSG_TRUNC)) {
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
-#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-				if (sysctl_net_latency_breakdown_validation) {
-					local_irq_save(irq_flags);
 					skb->rx_ts.data_copy = ktime_get_real();
-					new_irqtime = public_irq_time_read(smp_processor_id());
-					local_irq_restore(irq_flags);
-					// we are currently in rx path so record first last_irqtime in sock.
-					WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
-				} else
-#endif
-				{
-					skb->rx_ts.data_copy = ktime_get_real();
-				}
 			}
 #endif
 
@@ -2417,11 +2427,14 @@ found_fin_ok:
 			local_irq_save(irq_flags);
 			sk->sk_ts.read_return = ktime_get_real();
 			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nvcsw + current->nivcsw;
 			local_irq_restore(irq_flags);
-			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime))) {
+			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime)) || 
+				unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
 				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_RX_DATA_COPY_INVALID);
 			}
 			WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
+			WRITE_ONCE(sk->sk_ts.last_csw, new_csw);
 		} else 
 #endif
 		{
