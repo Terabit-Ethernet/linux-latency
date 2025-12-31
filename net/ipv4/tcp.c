@@ -2249,58 +2249,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 			release_sock(sk);
 			lock_sock(sk);
 		} else {
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-			if (sysctl_net_latency_breakdown_on) {
-#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-				if (sysctl_net_latency_breakdown_validation) {
-					local_irq_save(irq_flags);
-					sk->sk_ts.sleep_enter = ktime_get_real();
-					new_irqtime = public_irq_time_read(smp_processor_id());
-					new_csw = current->nvcsw + current->nivcsw;
-					local_irq_restore(irq_flags);
-
-					// sk->sk_ts.last_irqtime is updated in last tx_xmit_finish
-					delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
-
-					// we need to reset all sock's timestamp fields as they are not auto reset.
-					sk->sk_ts.hidden_app_irq_delta = 0;
-					sk->sk_ts.rx_data_copy_irq_delta = 0;
-					sk->sk_ts.application_irq_delta = 0;
-					sk->sk_ts.valid = 0;
-
-					if (unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
-						LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_CSW_INVALID);
-					} else if (unlikely(delta_irqtime)) {
-						sk->sk_ts.hidden_app_irq_delta = delta_irqtime;
-					}
-
-					// no need to update last_irqtime and last_csw here
-				} else
-#endif
-				{	
-					sk->sk_ts.sleep_enter = ktime_get_real();
-				}
-			}
-#endif
-
 			sk_wait_data(sk, &timeo, last);
-
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-			if (sysctl_net_latency_breakdown_on) {
-#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-				if (sysctl_net_latency_breakdown_validation) {
-					local_irq_save(irq_flags);
-					sk->sk_ts.wake_up = ktime_get_real();
-					sk->sk_ts.last_irqtime = public_irq_time_read(smp_processor_id());
-					sk->sk_ts.last_csw = current->nvcsw + current->nivcsw;
-					local_irq_restore(irq_flags);
-				} else
-#endif
-				{
-					sk->sk_ts.wake_up = ktime_get_real();
-				}
-			}
-#endif
 		}
 
 		if ((flags & MSG_PEEK) &&
