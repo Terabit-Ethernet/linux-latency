@@ -2671,6 +2671,7 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 	u32 max_segs;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 delta_irqtime;
 	u64 new_irqtime;
 	u64 new_csw;
 	unsigned long flags;
@@ -2703,12 +2704,17 @@ static bool tcp_write_xmit(struct sock *sk, unsigned int mss_now, int nonagle,
 				new_irqtime = public_irq_time_read(smp_processor_id());
 				new_csw = current->nvcsw + current->nivcsw;
 				local_irq_restore(flags);
-				if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(skb->tx_ts.last_irqtime)) || 
-				    unlikely(new_csw != READ_ONCE(skb->tx_ts.last_csw))) {
-					LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_DATA_COPY_INVALID);
+
+				delta_irqtime = new_irqtime - skb->tx_ts.last_irqtime;
+
+				if (unlikely(new_csw != skb->tx_ts.last_csw)) {
+					LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_DATA_COPY_CSW_INVALID);
+				} else if (delta_irqtime) {
+					skb->tx_ts.tx_data_copy_irq_delta = delta_irqtime;
 				}
-				WRITE_ONCE(skb->tx_ts.last_irqtime, new_irqtime);
-				WRITE_ONCE(skb->tx_ts.last_csw, new_csw);
+
+				skb->tx_ts.last_irqtime = new_irqtime;
+				skb->tx_ts.last_csw = new_csw;
 			} else
 #endif
 			{

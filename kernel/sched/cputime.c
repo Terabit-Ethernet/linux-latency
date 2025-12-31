@@ -24,10 +24,11 @@ EXPORT_PER_CPU_SYMBOL(cpu_irqtime);
 u64 public_irq_time_read(int cpu)
 {
 	// Maybe we need a more radical approach for so called irq time.
+	// 12/30: Maybe we can use the total time to do per-stage revertion?
 	struct irqtime *irqtime = &per_cpu(cpu_irqtime, cpu);
-	u64 irq_start_time;
-	irq_start_time = irqtime->irq_start_time;
-	return irq_start_time;
+	u64 irq_total_time;
+	irq_total_time = irqtime->total;
+	return irq_total_time;
 }
 EXPORT_SYMBOL_GPL(public_irq_time_read);
 

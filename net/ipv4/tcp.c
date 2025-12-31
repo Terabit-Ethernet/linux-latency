@@ -1340,6 +1340,9 @@ new_segment:
 				skb->tx_ts.last_csw = sk->sk_ts.last_csw;
 				skb->tx_ts.last_irqtime = sk->sk_ts.last_irqtime;
 				skb->tx_ts.valid = sk->sk_ts.valid;
+				skb->tx_ts.hidden_app_irq_delta = sk->sk_ts.hidden_app_irq_delta;
+				skb->tx_ts.rx_data_copy_irq_delta = sk->sk_ts.rx_data_copy_irq_delta;
+				skb->tx_ts.application_irq_delta = sk->sk_ts.application_irq_delta;
 #endif
 				skb->rx_ts = sk->sk_rcv_skb_ts;
 			}
@@ -1478,6 +1481,7 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 	int ret;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 delta_irqtime;
 	u64 new_irqtime;
 	u64 new_csw;
 	unsigned long flags;
@@ -1493,12 +1497,17 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 			new_irqtime = public_irq_time_read(smp_processor_id());
 			new_csw = current->nivcsw + current->nvcsw;
 			local_irq_restore(flags);
-			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime)) ||
-			    unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
-				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_APPLICATION_INVALID);
+
+			delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+			if (unlikely(new_csw != sk->sk_ts.last_csw)) {
+				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_APPLICATION_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				sk->sk_ts.application_irq_delta = delta_irqtime;
 			}
-			WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
-			WRITE_ONCE(sk->sk_ts.last_csw, new_csw);
+
+			sk->sk_ts.last_irqtime = new_irqtime;
+			sk->sk_ts.last_csw = new_csw;
 		} else
 #endif
 		{
@@ -2096,6 +2105,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	int cmsg_flags;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 delta_irqtime;
 	u64 new_irqtime;
 	u64 new_csw;
 	unsigned long irq_flags;
@@ -2248,15 +2258,26 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 					new_irqtime = public_irq_time_read(smp_processor_id());
 					new_csw = current->nvcsw + current->nivcsw;
 					local_irq_restore(irq_flags);
-					WRITE_ONCE(sk->sk_ts.valid, 0); // later transfered to skb->tx_ts.valid
-					// read last_irqtime written by last `mlx5e_txwqe_complete` call
-					if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime)) || 
-						unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
-						LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_INVALID);
+
+					// sk->sk_ts.last_irqtime is updated in last tx_xmit_finish
+					delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+					// we need to reset all sock's timestamp fields as they are not auto reset.
+					sk->sk_ts.hidden_app_irq_delta = 0;
+					sk->sk_ts.rx_data_copy_irq_delta = 0;
+					sk->sk_ts.application_irq_delta = 0;
+					sk->sk_ts.valid = 0;
+
+					if (unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
+						LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_CSW_INVALID);
+					} else if (unlikely(delta_irqtime)) {
+						sk->sk_ts.hidden_app_irq_delta = delta_irqtime;
 					}
+
+					// no need to update last_irqtime and last_csw here
 				} else
 #endif
-				{
+				{	
 					sk->sk_ts.sleep_enter = ktime_get_real();
 				}
 			}
@@ -2270,11 +2291,9 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 				if (sysctl_net_latency_breakdown_validation) {
 					local_irq_save(irq_flags);
 					sk->sk_ts.wake_up = ktime_get_real();
-					new_irqtime = public_irq_time_read(smp_processor_id());
-					new_csw = current->nvcsw + current->nivcsw;
+					sk->sk_ts.last_irqtime = public_irq_time_read(smp_processor_id());
+					sk->sk_ts.last_csw = current->nvcsw + current->nivcsw;
 					local_irq_restore(irq_flags);
-					WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
-					WRITE_ONCE(sk->sk_ts.last_csw, new_csw);
 				} else
 #endif
 				{
@@ -2338,33 +2357,33 @@ found_ok_skb:
 		copied += used;
 		len -= used;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-            if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only &&
-					inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
-                struct qizhe_time_element *element;
-				struct list_head *ele_entry, *safe;
-				list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
-					element = list_entry(ele_entry, struct qizhe_time_element, entry);
-					if (used != sysctl_net_latency_req_size || element->size < used) {
-						printk("used:%lu element->size:%d %p", used, element->size, element);
-					} else {
-						element->size -= used;
-						if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0) { 
-							trace_printk("[latency-breakdown] source port: %u destination port: %u "
-										 "-- rx -rx_sched: %lld timestamp: %lld\n", 
-										 be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport), 
-										 be16_to_cpu(sk->sk_dport),
-										 ktime_get_real() - element->time, ktime_get()
-										);
-	
-						}
+		if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only &&
+				inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
+			struct qizhe_time_element *element;
+			struct list_head *ele_entry, *safe;
+			list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
+				element = list_entry(ele_entry, struct qizhe_time_element, entry);
+				if (used != sysctl_net_latency_req_size || element->size < used) {
+					printk("used:%lu element->size:%d %p", used, element->size, element);
+				} else {
+					element->size -= used;
+					if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0) { 
+						trace_printk("[latency-breakdown] source port: %u destination port: %u "
+										"-- rx -rx_sched: %lld timestamp: %lld\n", 
+										be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport), 
+										be16_to_cpu(sk->sk_dport),
+										ktime_get_real() - element->time, ktime_get()
+									);
+
 					}
-					if(element->size == 0) {
-						list_del(&element->entry);
-						kfree(element);
-					}
-					break;
 				}
-            }
+				if(element->size == 0) {
+					list_del(&element->entry);
+					kfree(element);
+				}
+				break;
+			}
+		}
 #endif
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		if (sysctl_net_latency_breakdown_on) {
@@ -2429,12 +2448,17 @@ found_fin_ok:
 			new_irqtime = public_irq_time_read(smp_processor_id());
 			new_csw = current->nvcsw + current->nivcsw;
 			local_irq_restore(irq_flags);
-			if (!new_irqtime || unlikely(new_irqtime != READ_ONCE(sk->sk_ts.last_irqtime)) || 
-				unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
-				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_RX_DATA_COPY_INVALID);
+
+			delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+			if (unlikely(new_csw != sk->sk_ts.last_csw)) {
+				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_RX_DATA_COPY_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				sk->sk_ts.rx_data_copy_irq_delta = delta_irqtime;
 			}
-			WRITE_ONCE(sk->sk_ts.last_irqtime, new_irqtime);
-			WRITE_ONCE(sk->sk_ts.last_csw, new_csw);
+
+			sk->sk_ts.last_irqtime = new_irqtime;
+			sk->sk_ts.last_csw = new_csw;
 		} else 
 #endif
 		{

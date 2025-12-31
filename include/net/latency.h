@@ -55,25 +55,41 @@ extern ktime_t latency_breakdown_napi_ts[];
  * STAGE_TX_XMIT: tx_xmit to tx_xmit_finish
  */
 enum stage_invalid_bit {
-	STAGE_HIDDEN_APP_BIT = 0,
-    STAGE_RX_DATA_COPY_BIT,
-    STAGE_APPLICATION_BIT,
-    STAGE_TX_DATA_COPY_BIT,
-    STAGE_TX_TCP_PROC_BIT,
-    STAGE_TX_IP_PROC_BIT,
-    STAGE_TX_QUEUE_BIT,
-    STAGE_TX_XMIT_BIT,
+	// STAGE_HIDDEN_APP_IRQ_BIT = 0,
+    // STAGE_RX_DATA_COPY_IRQ_BIT,
+    // STAGE_APPLICATION_IRQ_BIT,
+    // STAGE_TX_DATA_COPY_IRQ_BIT,
+    // STAGE_TX_TCP_PROC_IRQ_BIT,
+    // STAGE_TX_IP_PROC_IRQ_BIT,
+    // STAGE_TX_QUEUE_IRQ_BIT,
+    // STAGE_TX_XMIT_IRQ_BIT,
+	STAGE_HIDDEN_APP_CSW_BIT = 0,
+	STAGE_RX_DATA_COPY_CSW_BIT,
+	STAGE_APPLICATION_CSW_BIT,
+	STAGE_TX_DATA_COPY_CSW_BIT,
+	STAGE_TX_TCP_PROC_CSW_BIT,
+	STAGE_TX_IP_PROC_CSW_BIT,
+	STAGE_TX_QUEUE_CSW_BIT,
+	STAGE_TX_XMIT_CSW_BIT,
     STAGE_INVALID_BIT_MAX
 };
 
-#define STAGE_HIDDEN_APP_INVALID 	(1ULL << STAGE_HIDDEN_APP_BIT)
-#define STAGE_RX_DATA_COPY_INVALID  (1ULL << STAGE_RX_DATA_COPY_BIT)
-#define STAGE_APPLICATION_INVALID   (1ULL << STAGE_APPLICATION_BIT)
-#define STAGE_TX_DATA_COPY_INVALID  (1ULL << STAGE_TX_DATA_COPY_BIT)
-#define STAGE_TX_TCP_PROC_INVALID   (1ULL << STAGE_TX_TCP_PROC_BIT)
-#define STAGE_TX_IP_PROC_INVALID    (1ULL << STAGE_TX_IP_PROC_BIT)
-#define STAGE_TX_QUEUE_INVALID      (1ULL << STAGE_TX_QUEUE_BIT)
-#define STAGE_TX_XMIT_INVALID       (1ULL << STAGE_TX_XMIT_BIT)
+// #define STAGE_HIDDEN_APP_IRQ_INVALID 	(1ULL << STAGE_HIDDEN_APP_IRQ_BIT)
+// #define STAGE_RX_DATA_COPY_IRQ_INVALID  (1ULL << STAGE_RX_DATA_COPY_IRQ_BIT)
+// #define STAGE_APPLICATION_IRQ_INVALID   (1ULL << STAGE_APPLICATION_IRQ_BIT)
+// #define STAGE_TX_DATA_COPY_IRQ_INVALID  (1ULL << STAGE_TX_DATA_COPY_IRQ_BIT)
+// #define STAGE_TX_TCP_PROC_IRQ_INVALID   (1ULL << STAGE_TX_TCP_PROC_IRQ_BIT)
+// #define STAGE_TX_IP_PROC_IRQ_INVALID    (1ULL << STAGE_TX_IP_PROC_IRQ_BIT)
+// #define STAGE_TX_QUEUE_IRQ_INVALID      (1ULL << STAGE_TX_QUEUE_IRQ_BIT)
+// #define STAGE_TX_XMIT_IRQ_INVALID       (1ULL << STAGE_TX_XMIT_IRQ_BIT)
+#define STAGE_HIDDEN_APP_CSW_INVALID 	(1ULL << STAGE_HIDDEN_APP_CSW_BIT)
+#define STAGE_RX_DATA_COPY_CSW_INVALID  (1ULL << STAGE_RX_DATA_COPY_CSW_BIT)
+#define STAGE_APPLICATION_CSW_INVALID   (1ULL << STAGE_APPLICATION_CSW_BIT)
+#define STAGE_TX_DATA_COPY_CSW_INVALID  (1ULL << STAGE_TX_DATA_COPY_CSW_BIT)
+#define STAGE_TX_TCP_PROC_CSW_INVALID   (1ULL << STAGE_TX_TCP_PROC_CSW_BIT)
+#define STAGE_TX_IP_PROC_CSW_INVALID    (1ULL << STAGE_TX_IP_PROC_CSW_BIT)
+#define STAGE_TX_QUEUE_CSW_INVALID	  	(1ULL << STAGE_TX_QUEUE_CSW_BIT)
+#define STAGE_TX_XMIT_CSW_INVALID     	(1ULL << STAGE_TX_XMIT_CSW_BIT)
 
 #define LATENCY_STAGE_MARK_INVALID(mask, stage) \
     ((mask) |= (stage))
@@ -117,6 +133,15 @@ struct tx_timestamps_t {
 	u64 last_csw;
 	u64 last_irqtime;
 	u64 valid;
+	// we should use 64-bit here, but u32 is enough?
+	u32 hidden_app_irq_delta;
+	u32 rx_data_copy_irq_delta;
+	u32 application_irq_delta;
+	u32 tx_data_copy_irq_delta;
+	u32 tx_tcp_irq_delta;
+	u32 tx_ip_irq_delta;
+	u32 tx_queue_irq_delta;
+	u32 tx_xmit_irq_delta;
 #endif
 };
 
@@ -133,6 +158,9 @@ struct sock_timestamps_t {
 	u64 last_csw;
 	u64 last_irqtime;
 	u64 valid;
+	u32 hidden_app_irq_delta;
+	u32 rx_data_copy_irq_delta;
+	u32 application_irq_delta;
 #endif
 };
 
@@ -150,7 +178,7 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		"-- sched -- t1: %lld t2: %lld t3: %lld t4: %lld t5: %lld t6: %lld t7: %lld p: %u f: %u "
 #endif
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-		"-- last_xmit_finish: %lld valid: %llu"
+		"-- last_xmit_finish: %lld valid: %llu 1: %u 2: %u 3: %u 4: %u 5: %u 6: %u 7: %u 8: %u "
 #endif
 		"\n",
 		sport,
@@ -191,7 +219,15 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		,
 		tx_ts.last_xmit_finish,
-		tx_ts.valid
+		tx_ts.valid,
+		tx_ts.hidden_app_irq_delta,
+		tx_ts.rx_data_copy_irq_delta,
+		tx_ts.application_irq_delta,
+		tx_ts.tx_data_copy_irq_delta,
+		tx_ts.tx_tcp_irq_delta,
+		tx_ts.tx_ip_irq_delta,
+		tx_ts.tx_queue_irq_delta,
+		tx_ts.tx_xmit_irq_delta
 #endif
 	);
 }
