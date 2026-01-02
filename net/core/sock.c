@@ -2592,16 +2592,10 @@ int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
 			// sk->sk_ts.last_irqtime is updated in last tx_xmit_finish
 			delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
 
-			// we need to reset all sock's timestamp fields as they are not auto reset.
-			sk->sk_ts.hidden_app_irq_delta = 0;
-			sk->sk_ts.rx_data_copy_irq_delta = 0;
-			sk->sk_ts.application_irq_delta = 0;
-			sk->sk_ts.valid = 0;
-
 			if (unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
-				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_CSW_INVALID);
+				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_SLEEP_PREPARE_CSW_INVALID);
 			} else if (unlikely(delta_irqtime)) {
-				sk->sk_ts.hidden_app_irq_delta = delta_irqtime;
+				sk->sk_ts.sleep_prepare_irq_delta = delta_irqtime;
 			}
 
 			// no need to update last_irqtime and last_csw here

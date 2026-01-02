@@ -1341,6 +1341,8 @@ new_segment:
 				skb->tx_ts.last_irqtime = sk->sk_ts.last_irqtime;
 				skb->tx_ts.valid = sk->sk_ts.valid;
 				skb->tx_ts.hidden_app_irq_delta = sk->sk_ts.hidden_app_irq_delta;
+				skb->tx_ts.sleep_prepare_irq_delta = sk->sk_ts.sleep_prepare_irq_delta;
+				skb->tx_ts.sleep_wake_up_irq_delta = sk->sk_ts.sleep_wake_up_irq_delta;
 				skb->tx_ts.rx_data_copy_irq_delta = sk->sk_ts.rx_data_copy_irq_delta;
 				skb->tx_ts.application_irq_delta = sk->sk_ts.application_irq_delta;
 #endif
@@ -2111,7 +2113,40 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	unsigned long irq_flags;
 #endif
 	if (sysctl_net_latency_breakdown_on) {
-		sk->sk_ts.read_enter = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(irq_flags);
+			sk->sk_ts.read_enter = ktime_get_real();
+			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nivcsw + current->nvcsw;
+			local_irq_restore(irq_flags);
+
+			delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+			// We need to reset all sock's timestamp fields and delta fields, but
+			// exclude rx_enter which we just set, and ready set by IRQ path.
+			sk->sk_ts.hidden_app_irq_delta = 0;
+			sk->sk_ts.sleep_prepare_irq_delta = 0;
+			sk->sk_ts.sleep_wake_up_irq_delta = 0;
+			sk->sk_ts.rx_data_copy_irq_delta = 0;
+			sk->sk_ts.application_irq_delta = 0;
+			sk->sk_ts.sleep_enter = 0;
+			sk->sk_ts.wake_up = 0;
+			sk->sk_ts.valid = 0;
+
+			if (unlikely(new_csw != sk->sk_ts.last_csw)) {
+				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				sk->sk_ts.hidden_app_irq_delta = delta_irqtime;
+			}
+
+			sk->sk_ts.last_irqtime = new_irqtime;
+			sk->sk_ts.last_csw = new_csw;
+		} else
+#endif		
+		{
+			sk->sk_ts.read_enter = ktime_get_real();
+		}
 	}
 #endif
 
@@ -2289,7 +2324,29 @@ found_ok_skb:
 		if (!(flags & MSG_TRUNC)) {
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+				if (sysctl_net_latency_breakdown_validation) {
+					local_irq_save(irq_flags);
+					skb->rx_ts.data_copy = ktime_get_real(); // histroy issue: write to skb rather than sk
+					new_irqtime = public_irq_time_read(smp_processor_id());
+					new_csw = current->nvcsw + current->nivcsw;
+					local_irq_restore(irq_flags);
+
+					delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+					if (unlikely(new_csw != sk->sk_ts.last_csw)) {
+						LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_SLEEP_WAKE_UP_CSW_INVALID);
+					} else if (unlikely(delta_irqtime)) {
+						sk->sk_ts.sleep_wake_up_irq_delta = delta_irqtime;
+					}
+
+					sk->sk_ts.last_irqtime = new_irqtime;
+					sk->sk_ts.last_csw = new_csw;
+				} else
+#endif				
+				{
 					skb->rx_ts.data_copy = ktime_get_real();
+				}
 			}
 #endif
 

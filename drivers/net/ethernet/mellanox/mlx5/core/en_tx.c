@@ -420,7 +420,7 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		mlx5e_notify_hw(wq, sq->pc, sq->uar_map, cseg);
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	if (sysctl_net_latency_breakdown_on && skb->sport) {
+	if (sysctl_net_latency_breakdown_on) {
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
 			local_irq_save(flags);
@@ -447,7 +447,9 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		{
 			skb->tx_ts.xmit_finish = ktime_get_real();
 		}
-		latency_breakdown_print_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+		if (skb->sport) {
+			latency_breakdown_print_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+		}
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation && skb->sk) {
 			// copy to skb->tx_ts later

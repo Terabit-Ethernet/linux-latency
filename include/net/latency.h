@@ -64,6 +64,8 @@ enum stage_invalid_bit {
     // STAGE_TX_QUEUE_IRQ_BIT,
     // STAGE_TX_XMIT_IRQ_BIT,
 	STAGE_HIDDEN_APP_CSW_BIT = 0,
+	STAGE_SLEEP_PREPARE_CSW_BIT,
+	STAGE_SLEEP_WAKE_UP_CSW_BIT,
 	STAGE_RX_DATA_COPY_CSW_BIT,
 	STAGE_APPLICATION_CSW_BIT,
 	STAGE_TX_DATA_COPY_CSW_BIT,
@@ -83,6 +85,8 @@ enum stage_invalid_bit {
 // #define STAGE_TX_QUEUE_IRQ_INVALID      (1ULL << STAGE_TX_QUEUE_IRQ_BIT)
 // #define STAGE_TX_XMIT_IRQ_INVALID       (1ULL << STAGE_TX_XMIT_IRQ_BIT)
 #define STAGE_HIDDEN_APP_CSW_INVALID 	(1ULL << STAGE_HIDDEN_APP_CSW_BIT)
+#define STAGE_SLEEP_PREPARE_CSW_INVALID (1ULL << STAGE_SLEEP_PREPARE_CSW_BIT)
+#define STAGE_SLEEP_WAKE_UP_CSW_INVALID (1ULL << STAGE_SLEEP_WAKE_UP_CSW_BIT)
 #define STAGE_RX_DATA_COPY_CSW_INVALID  (1ULL << STAGE_RX_DATA_COPY_CSW_BIT)
 #define STAGE_APPLICATION_CSW_INVALID   (1ULL << STAGE_APPLICATION_CSW_BIT)
 #define STAGE_TX_DATA_COPY_CSW_INVALID  (1ULL << STAGE_TX_DATA_COPY_CSW_BIT)
@@ -130,11 +134,13 @@ struct tx_timestamps_t {
 	ktime_t	xmit_finish;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	ktime_t last_xmit_finish;
-	u64 last_csw;
 	u64 last_irqtime;
-	u64 valid;
+	u32 last_csw;
+	u32 valid;
 	// we should use 64-bit here, but u32 is enough?
 	u32 hidden_app_irq_delta;
+	u32 sleep_prepare_irq_delta;
+	u32 sleep_wake_up_irq_delta;
 	u32 rx_data_copy_irq_delta;
 	u32 application_irq_delta;
 	u32 tx_data_copy_irq_delta;
@@ -155,10 +161,12 @@ struct sock_timestamps_t {
 	ktime_t	wake_up;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	ktime_t last_xmit_finish;
-	u64 last_csw;
 	u64 last_irqtime;
-	u64 valid;
+	u32 last_csw;
+	u32 valid;
 	u32 hidden_app_irq_delta;
+	u32 sleep_prepare_irq_delta;
+	u32 sleep_wake_up_irq_delta;
 	u32 rx_data_copy_irq_delta;
 	u32 application_irq_delta;
 #endif
@@ -178,7 +186,7 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		"-- sched -- t1: %lld t2: %lld t3: %lld t4: %lld t5: %lld t6: %lld t7: %lld p: %u f: %u "
 #endif
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-		"-- last_xmit_finish: %lld valid: %llu 1: %u 2: %u 3: %u 4: %u 5: %u 6: %u 7: %u 8: %u "
+		"-- last_xmit_finish: %lld valid: %u 1: %u 2: %u 3: %u 4: %u 5: %u 6: %u 7: %u 8: %u 9: %u 10: %u "
 #endif
 		"\n",
 		sport,
@@ -221,6 +229,8 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		tx_ts.last_xmit_finish,
 		tx_ts.valid,
 		tx_ts.hidden_app_irq_delta,
+		tx_ts.sleep_prepare_irq_delta,
+		tx_ts.sleep_wake_up_irq_delta,
 		tx_ts.rx_data_copy_irq_delta,
 		tx_ts.application_irq_delta,
 		tx_ts.tx_data_copy_irq_delta,
