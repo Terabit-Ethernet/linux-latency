@@ -436,12 +436,6 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 			} else if (unlikely(delta_irqtime)) {
 				skb->tx_ts.tx_xmit_irq_delta = delta_irqtime;
 			}
-
-			// write back to sock rather than skb, for next packet!
-			if (skb->sk) {
-				skb->sk->sk_ts.last_irqtime = new_irqtime;
-				skb->sk->sk_ts.last_csw = new_csw;
-			}
 		} else
 #endif
 		{
@@ -449,11 +443,19 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		}
 		if (skb->sport) {
 			latency_breakdown_print_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+			// after all I decide to give up half of the hidden_app for performance
+			local_irq_save(flags);
+			skb->sk->sk_ts.last_xmit_finish = ktime_get_real();
+			skb->sk->sk_ts.last_irqtime = public_irq_time_read(smp_processor_id());
+			skb->sk->sk_ts.last_csw = current->nvcsw + current->nivcsw;
+			local_irq_restore(flags);
 		}
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-		if (sysctl_net_latency_breakdown_validation && skb->sk) {
-			// copy to skb->tx_ts later
-			skb->sk->sk_ts.last_xmit_finish = ktime_get_real();
+		if (sysctl_net_latency_breakdown_dumb_schedule && skb->sk) {
+			if (skb->sk->sk_protocol == IPPROTO_TCP) {
+				current->se.vruntime = tcp_sk(skb->sk)->data_segs_out * 
+										LATENCY_PACKET_RUNTIME_WEIGHT;
+			}
 		}
 #endif	
 	}

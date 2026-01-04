@@ -21,6 +21,7 @@
 #define LATENCY_BREAKDOWN_LOG_MIN 10
 #define LATENCY_BREAKDOWN_LOG_MAX 10000
 #define LATENCY_BREAKDOWN_LOG_DEFAULT 997
+#define LATENCY_PACKET_RUNTIME_WEIGHT 1000
 
 /* Sysctl variables to control latency measurements. */
 extern unsigned int sysctl_net_latency_breakdown_on;
@@ -31,6 +32,7 @@ extern unsigned int sysctl_net_latency_breakdown_nrfs;
 extern unsigned int sysctl_net_latency_rx_sched_lat_only;
 extern unsigned int sysctl_net_latency_req_size;
 extern unsigned int sysctl_net_latency_breakdown_validation;
+extern unsigned int sysctl_net_latency_breakdown_dumb_schedule;
 
 /* Per-CPU variables for measurements. */
 extern ktime_t latency_breakdown_irq_ts[];
