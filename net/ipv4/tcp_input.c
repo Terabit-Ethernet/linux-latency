@@ -4952,7 +4952,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 			NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPZEROWINDOWDROP);
 			goto out_of_window;
 		}
-		qizhe_len = TCP_SKB_CB(skb)->end_seq -tp->rcv_nxt;
+		qizhe_len = TCP_SKB_CB(skb)->end_seq - tp->rcv_nxt;
 		/* Ok. In sequence. In window. */
 queue_and_out:
 		if (skb_queue_len(&sk->sk_receive_queue) == 0)
@@ -4990,9 +4990,9 @@ queue_and_out:
 			tcp_data_ready(sk);
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		/* Assume no packet reordering */
-	        if (sysctl_net_latency_breakdown_on  && sysctl_net_latency_rx_sched_lat_only && 
-			inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
-        	        qizhe_element = kzalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
+		if (sysctl_net_latency_breakdown_on  && sysctl_net_latency_rx_sched_lat_only && 
+			inet_sk(sk)->inet_saddr == in_aton("192.168.1.101")) {
+			qizhe_element = kzalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
 			qizhe_element->time = ktime_get_real();
 			qizhe_element->size = qizhe_len;
 			qizhe_element->core = raw_smp_processor_id();
@@ -5869,21 +5869,22 @@ no_ack:
 				kfree_skb_partial(skb, fragstolen);
 			tcp_data_ready(sk);
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-      		        if (sysctl_net_latency_breakdown_on && eaten <= 0) {
-                	        skb->rx_ts.ready = ktime_get_real();
-                	}
+			if (sysctl_net_latency_breakdown_on && eaten <= 0) {
+					skb->rx_ts.ready = ktime_get_real();
+			}
 			/* Assume no packet reordering */
-                	if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only  &&
-                        	inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
-                       		struct qizhe_time_element *qizhe_element;
+			if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only  && 
+				inet_sk(sk)->inet_saddr == in_aton("192.168.1.101")) {
+				struct qizhe_time_element *qizhe_element;
 				qizhe_element = kzalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
-                        	qizhe_element->time = ktime_get_real();
-                        	qizhe_element->size = qizhe_len;
+				qizhe_element->time = ktime_get_real();
+				qizhe_element->size = qizhe_len;
 				qizhe_element->core = raw_smp_processor_id();
-				if(qizhe_element->size % 64 != 0)
-                                	WARN_ON(true);
-                        	INIT_LIST_HEAD(&qizhe_element->entry);
-                        	list_add_tail(&qizhe_element->entry, &tp->qizhe_time_queue);
+				if(qizhe_element->size % 64 != 0) {
+					WARN_ON(true);
+				}
+				INIT_LIST_HEAD(&qizhe_element->entry);
+				list_add_tail(&qizhe_element->entry, &tp->qizhe_time_queue);
 			}
 #endif
 			return;

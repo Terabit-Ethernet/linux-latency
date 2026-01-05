@@ -187,9 +187,6 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 #ifdef CONFIG_SYSRAY_SCHED_INSTR
 		"-- sched -- t1: %lld t2: %lld t3: %lld t4: %lld t5: %lld t6: %lld t7: %lld p: %u f: %u "
 #endif
-#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-		"-- last_xmit_finish: %lld valid: %u 1: %u 2: %u 3: %u 4: %u 5: %u 6: %u 7: %u 8: %u 9: %u 10: %u "
-#endif
 		"\n",
 		sport,
 		dport,
@@ -226,6 +223,41 @@ static inline void latency_breakdown_print_log(unsigned int sport, unsigned int 
 		sinfo->sched_preempted,
 		sinfo->sched_rq_clock_update_flags
 #endif
+	);
+}
+
+static inline void latency_breakdown_print_valid_log(unsigned int sport, unsigned int dport, struct rx_timestamps_t rx_ts, struct tx_timestamps_t tx_ts) {
+	trace_printk(
+		"[latency-breakdown] source port: %u destination port: %u "
+		"-- rx -- hw: %lld alloc: %lld irq: %lld napi: %lld gro: %lld ip: %lld tcp: %lld read: %lld sleep: %lld ready: %lld wakeup: %lld data copy: %lld return: %lld "
+		"-- tx -- alloc: %lld write: %lld data copy: %lld tcp: %lld ip: %lld queue: %lld xmit: %lld finish: %lld "
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		"-- last_xmit_finish: %lld valid: %u 1: %u 2: %u 3: %u 4: %u 5: %u 6: %u 7: %u 8: %u 9: %u 10: %u "
+#endif
+		"\n",
+		sport,
+		dport,
+		rx_ts.hw,
+		rx_ts.alloc,
+		rx_ts.irq,
+		rx_ts.napi,
+		rx_ts.gro,
+		rx_ts.ip,
+		rx_ts.tcp,
+		rx_ts.read_enter,
+		rx_ts.sleep_enter,
+		rx_ts.ready,
+		rx_ts.wake_up,
+		rx_ts.data_copy,
+		rx_ts.read_return,
+		tx_ts.alloc,
+		tx_ts.write_enter,
+		tx_ts.data_copy,
+		tx_ts.tcp,
+		tx_ts.ip,
+		tx_ts.queue_xmit,
+		tx_ts.xmit,
+		tx_ts.xmit_finish
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		,
 		tx_ts.last_xmit_finish,

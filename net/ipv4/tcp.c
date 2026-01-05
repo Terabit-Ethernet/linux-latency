@@ -1335,16 +1335,17 @@ new_segment:
 				skb->sport = be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport);
 				skb->tx_ts.write_enter = sk->sk_ts.write_enter;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-				// copy valid bitmap and last_irqtime stamp to new tx skb
-				skb->tx_ts.last_xmit_finish = sk->sk_ts.last_xmit_finish;
-				skb->tx_ts.last_csw = sk->sk_ts.last_csw;
-				skb->tx_ts.last_irqtime = sk->sk_ts.last_irqtime;
-				skb->tx_ts.valid = sk->sk_ts.valid;
-				skb->tx_ts.hidden_app_irq_delta = sk->sk_ts.hidden_app_irq_delta;
-				skb->tx_ts.sleep_prepare_irq_delta = sk->sk_ts.sleep_prepare_irq_delta;
-				skb->tx_ts.sleep_wake_up_irq_delta = sk->sk_ts.sleep_wake_up_irq_delta;
-				skb->tx_ts.rx_data_copy_irq_delta = sk->sk_ts.rx_data_copy_irq_delta;
-				skb->tx_ts.application_irq_delta = sk->sk_ts.application_irq_delta;
+				if (sysctl_net_latency_breakdown_validation) {
+					skb->tx_ts.last_xmit_finish = sk->sk_ts.last_xmit_finish;
+					skb->tx_ts.last_csw = sk->sk_ts.last_csw;
+					skb->tx_ts.last_irqtime = sk->sk_ts.last_irqtime;
+					skb->tx_ts.valid = sk->sk_ts.valid;
+					skb->tx_ts.hidden_app_irq_delta = sk->sk_ts.hidden_app_irq_delta;
+					skb->tx_ts.sleep_prepare_irq_delta = sk->sk_ts.sleep_prepare_irq_delta;
+					skb->tx_ts.sleep_wake_up_irq_delta = sk->sk_ts.sleep_wake_up_irq_delta;
+					skb->tx_ts.rx_data_copy_irq_delta = sk->sk_ts.rx_data_copy_irq_delta;
+					skb->tx_ts.application_irq_delta = sk->sk_ts.application_irq_delta;
+				}
 #endif
 				skb->rx_ts = sk->sk_rcv_skb_ts;
 			}
@@ -2364,7 +2365,7 @@ found_ok_skb:
 		len -= used;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only &&
-				inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
+				inet_sk(sk)->inet_saddr == in_aton("192.168.1.101")) {
 			struct qizhe_time_element *element;
 			struct list_head *ele_entry, *safe;
 			list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {

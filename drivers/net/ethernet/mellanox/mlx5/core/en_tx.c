@@ -390,6 +390,7 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	struct mlx5_wq_cyc *wq = &sq->wq;
 	bool send_doorbell;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
+	struct sock *sk;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 delta_irqtime;
 	u64 new_irqtime;
@@ -419,8 +420,20 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	if (send_doorbell)
 		mlx5e_notify_hw(wq, sq->pc, sq->uar_map, cseg);
 
+	/*
+	 * @amefumi:
+	 * 1. From the perspective of packet lifetime (and xmit processing time), we update
+	 *	  skb->tx_ts.xmit_finish (and irqtime/csw if we are to measure processing time)
+	 *    first, and then print the latency breakdown log, only when packet is sampled.
+	 * 2. When we are to measure processing time, we update skb->sk's xmit_finish
+	 *    timestamp, which is the time after logging to avoid printing overhead on 
+	 *    processing time estimation.
+	 * 3. The dumb (or naive) packet-cound-based scheduling is indenpendent of measurement,
+	 *    thus we do it at the end out of the measurement conditionals.
+	 */
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	if (sysctl_net_latency_breakdown_on) {
+	sk = skb->sk;
+	if (sysctl_net_latency_breakdown_on && skb->sport) {
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
 			local_irq_save(flags);
@@ -436,28 +449,29 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 			} else if (unlikely(delta_irqtime)) {
 				skb->tx_ts.tx_xmit_irq_delta = delta_irqtime;
 			}
+
+			latency_breakdown_print_valid_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
 		} else
 #endif
 		{
 			skb->tx_ts.xmit_finish = ktime_get_real();
-		}
-		if (skb->sport) {
+			
 			latency_breakdown_print_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
-			// after all I decide to give up half of the hidden_app for performance
+		}
+		
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		// after all I decide to give up half of the hidden_app for performance
+		if (sysctl_net_latency_breakdown_validation && sk) {
 			local_irq_save(flags);
-			skb->sk->sk_ts.last_xmit_finish = ktime_get_real();
-			skb->sk->sk_ts.last_irqtime = public_irq_time_read(smp_processor_id());
-			skb->sk->sk_ts.last_csw = current->nvcsw + current->nivcsw;
+			sk->sk_ts.last_xmit_finish = ktime_get_real();
+			sk->sk_ts.last_irqtime = public_irq_time_read(smp_processor_id());
+			sk->sk_ts.last_csw = current->nvcsw + current->nivcsw;
 			local_irq_restore(flags);
 		}
-#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-		if (sysctl_net_latency_breakdown_dumb_schedule && skb->sk) {
-			if (skb->sk->sk_protocol == IPPROTO_TCP) {
-				current->se.vruntime = tcp_sk(skb->sk)->data_segs_out * 
-										LATENCY_PACKET_RUNTIME_WEIGHT;
-			}
-		}
-#endif	
+#endif
+	}
+	if (sysctl_net_latency_breakdown_dumb_schedule && sk && sk->sk_protocol == IPPROTO_TCP) {
+		current->se.vruntime = tcp_sk(sk)->data_segs_out * LATENCY_PACKET_RUNTIME_WEIGHT;
 	}
 #endif
 }
