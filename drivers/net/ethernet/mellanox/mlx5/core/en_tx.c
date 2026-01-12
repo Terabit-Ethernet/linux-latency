@@ -470,8 +470,9 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		}
 #endif
 	}
-	if (sysctl_net_latency_breakdown_dumb_schedule && sk && sk->sk_protocol == IPPROTO_TCP) {
-		current->se.vruntime = tcp_sk(sk)->data_segs_out * LATENCY_PACKET_RUNTIME_WEIGHT;
+	if (sysctl_net_latency_dumb_schedule_complete && sk && sk->sk_protocol == IPPROTO_TCP) {
+		// current->se.vruntime += tcp_sk(sk)->data_segs_out * LATENCY_PACKET_RUNTIME_WEIGHT;
+		current->se.vruntime += LATENCY_PACKET_RUNTIME_WEIGHT;
 	}
 #endif
 }

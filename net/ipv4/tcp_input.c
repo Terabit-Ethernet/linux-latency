@@ -4991,7 +4991,7 @@ queue_and_out:
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		/* Assume no packet reordering */
 		if (sysctl_net_latency_breakdown_on  && sysctl_net_latency_rx_sched_lat_only && 
-			inet_sk(sk)->inet_saddr == in_aton("192.168.1.101")) {
+			inet_sk(sk)->inet_saddr == in_aton(LATENCY_MONITOR_SOURCE_IP)) {
 			qizhe_element = kzalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
 			qizhe_element->time = ktime_get_real();
 			qizhe_element->size = qizhe_len;
@@ -5874,7 +5874,7 @@ no_ack:
 			}
 			/* Assume no packet reordering */
 			if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only  && 
-				inet_sk(sk)->inet_saddr == in_aton("192.168.1.101")) {
+				inet_sk(sk)->inet_saddr == in_aton(LATENCY_MONITOR_SOURCE_IP)) {
 				struct qizhe_time_element *qizhe_element;
 				qizhe_element = kzalloc(sizeof(struct qizhe_time_element), GFP_ATOMIC);
 				qizhe_element->time = ktime_get_real();

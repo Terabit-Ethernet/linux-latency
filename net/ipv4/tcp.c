@@ -1351,6 +1351,14 @@ new_segment:
 			}
 			sk->sk_log_index++;
 		}
+
+		if (sysctl_net_latency_dumb_schedule_tcp_send &&
+			sk->sk_protocol == IPPROTO_TCP &&
+			inet_sk(sk)->inet_saddr == in_aton(LATENCY_MONITOR_SOURCE_IP)) {
+			// current->se.vruntime += tcp_sk(sk)->data_segs_out * LATENCY_PACKET_RUNTIME_WEIGHT;
+			current->se.vruntime += LATENCY_PACKET_RUNTIME_WEIGHT;
+		}
+
 #endif
 
 		/* Where to copy to? */
@@ -2365,7 +2373,7 @@ found_ok_skb:
 		len -= used;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only &&
-				inet_sk(sk)->inet_saddr == in_aton("192.168.1.101")) {
+				inet_sk(sk)->inet_saddr == in_aton(LATENCY_MONITOR_SOURCE_IP)) {
 			struct qizhe_time_element *element;
 			struct list_head *ele_entry, *safe;
 			list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
