@@ -35,14 +35,14 @@ EXPORT_SYMBOL(sysctl_net_latency_req_size);
 unsigned int sysctl_net_latency_breakdown_validation __read_mostly = 0;
 EXPORT_SYMBOL(sysctl_net_latency_breakdown_validation);
 
-unsigned int sysctl_net_latency_dumb_schedule_complete __read_mostly = 0;
-EXPORT_SYMBOL(sysctl_net_latency_dumb_schedule_complete);
+unsigned int sysctl_net_latency_dumb_schedule_enable __read_mostly = 0;
+EXPORT_SYMBOL(sysctl_net_latency_dumb_schedule_enable);
 
-unsigned int sysctl_net_latency_dumb_schedule_tcp_send __read_mostly = 0;
-EXPORT_SYMBOL(sysctl_net_latency_dumb_schedule_tcp_send);
+unsigned int sysctl_net_latency_dumb_schedule_weight __read_mostly = 0;
+EXPORT_SYMBOL(sysctl_net_latency_dumb_schedule_weight);
 
-unsigned int sysctl_net_latency_dumb_schedule_rx_sleep __read_mostly = 0;
-EXPORT_SYMBOL(sysctl_net_latency_dumb_schedule_rx_sleep);
+unsigned int sysctl_net_latency_dumb_schedule_disable_clamp __read_mostly = 0;
+EXPORT_SYMBOL(sysctl_net_latency_dumb_schedule_disable_clamp);
 
 ktime_t latency_breakdown_irq_ts[CONFIG_NR_CPUS];
 EXPORT_SYMBOL(latency_breakdown_irq_ts);

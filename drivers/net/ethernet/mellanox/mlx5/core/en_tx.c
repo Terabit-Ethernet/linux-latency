@@ -395,6 +395,7 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	u64 delta_irqtime;
 	u64 new_irqtime;
 	u64 new_csw;
+	int cpu;
 	unsigned long flags;
 #endif
 #endif
@@ -433,12 +434,14 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	 */
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	sk = skb->sk;
-	if (sysctl_net_latency_breakdown_on && skb->sport) {
+	cpu = smp_processor_id();
+	if (sysctl_net_latency_breakdown_on && skb->sport && (cpu == 32 || cpu == 96)) {
+		// only sample packets on cpu 32 and 96 for now
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
 			local_irq_save(flags);
 			skb->tx_ts.xmit_finish = ktime_get_real();
-			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_irqtime = public_irq_time_read(cpu);
 			new_csw = current->nvcsw + current->nivcsw;
 			local_irq_restore(flags);
 
@@ -464,7 +467,7 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 		if (sysctl_net_latency_breakdown_validation && sk) {
 			local_irq_save(flags);
 			sk->sk_ts.last_xmit_finish = ktime_get_real();
-			sk->sk_ts.last_irqtime = public_irq_time_read(smp_processor_id());
+			sk->sk_ts.last_irqtime = public_irq_time_read(cpu);
 			sk->sk_ts.last_csw = current->nvcsw + current->nivcsw;
 			local_irq_restore(flags);
 		}

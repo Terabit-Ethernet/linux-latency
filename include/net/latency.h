@@ -22,7 +22,6 @@
 #define LATENCY_BREAKDOWN_LOG_MAX 10000
 #define LATENCY_BREAKDOWN_LOG_DEFAULT 997
 #define LATENCY_MONITOR_SOURCE_IP "192.168.1.101"
-#define LATENCY_PACKET_RUNTIME_WEIGHT 1000000
 
 
 /* Sysctl variables to control latency measurements. */
@@ -34,9 +33,9 @@ extern unsigned int sysctl_net_latency_breakdown_nrfs;
 extern unsigned int sysctl_net_latency_breakdown_validation;
 extern unsigned int sysctl_net_latency_rx_sched_lat_only;
 extern unsigned int sysctl_net_latency_req_size;
-extern unsigned int sysctl_net_latency_dumb_schedule_complete;
-extern unsigned int sysctl_net_latency_dumb_schedule_tcp_send;
-extern unsigned int sysctl_net_latency_dumb_schedule_rx_sleep;
+extern unsigned int sysctl_net_latency_dumb_schedule_enable;
+extern unsigned int sysctl_net_latency_dumb_schedule_weight;
+extern unsigned int sysctl_net_latency_dumb_schedule_disable_clamp;
 
 
 /* Per-CPU variables for measurements. */
@@ -62,14 +61,6 @@ extern ktime_t latency_breakdown_napi_ts[];
  * STAGE_TX_XMIT: tx_xmit to tx_xmit_finish
  */
 enum stage_invalid_bit {
-	// STAGE_HIDDEN_APP_IRQ_BIT = 0,
-    // STAGE_RX_DATA_COPY_IRQ_BIT,
-    // STAGE_APPLICATION_IRQ_BIT,
-    // STAGE_TX_DATA_COPY_IRQ_BIT,
-    // STAGE_TX_TCP_PROC_IRQ_BIT,
-    // STAGE_TX_IP_PROC_IRQ_BIT,
-    // STAGE_TX_QUEUE_IRQ_BIT,
-    // STAGE_TX_XMIT_IRQ_BIT,
 	STAGE_HIDDEN_APP_CSW_BIT = 0,
 	STAGE_SLEEP_PREPARE_CSW_BIT,
 	STAGE_SLEEP_WAKE_UP_CSW_BIT,
@@ -83,14 +74,6 @@ enum stage_invalid_bit {
     STAGE_INVALID_BIT_MAX
 };
 
-// #define STAGE_HIDDEN_APP_IRQ_INVALID 	(1ULL << STAGE_HIDDEN_APP_IRQ_BIT)
-// #define STAGE_RX_DATA_COPY_IRQ_INVALID  (1ULL << STAGE_RX_DATA_COPY_IRQ_BIT)
-// #define STAGE_APPLICATION_IRQ_INVALID   (1ULL << STAGE_APPLICATION_IRQ_BIT)
-// #define STAGE_TX_DATA_COPY_IRQ_INVALID  (1ULL << STAGE_TX_DATA_COPY_IRQ_BIT)
-// #define STAGE_TX_TCP_PROC_IRQ_INVALID   (1ULL << STAGE_TX_TCP_PROC_IRQ_BIT)
-// #define STAGE_TX_IP_PROC_IRQ_INVALID    (1ULL << STAGE_TX_IP_PROC_IRQ_BIT)
-// #define STAGE_TX_QUEUE_IRQ_INVALID      (1ULL << STAGE_TX_QUEUE_IRQ_BIT)
-// #define STAGE_TX_XMIT_IRQ_INVALID       (1ULL << STAGE_TX_XMIT_IRQ_BIT)
 #define STAGE_HIDDEN_APP_CSW_INVALID 	(1ULL << STAGE_HIDDEN_APP_CSW_BIT)
 #define STAGE_SLEEP_PREPARE_CSW_INVALID (1ULL << STAGE_SLEEP_PREPARE_CSW_BIT)
 #define STAGE_SLEEP_WAKE_UP_CSW_INVALID (1ULL << STAGE_SLEEP_WAKE_UP_CSW_BIT)

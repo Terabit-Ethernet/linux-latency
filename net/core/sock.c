@@ -2606,13 +2606,6 @@ int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
 			sk->sk_ts.sleep_enter = ktime_get_real();
 		}
 	}
-
-	if (sysctl_net_latency_dumb_schedule_rx_sleep &&
-		sk->sk_protocol == IPPROTO_TCP &&
-		inet_sk(sk)->inet_saddr == in_aton(LATENCY_MONITOR_SOURCE_IP)) {
-		// current->se.vruntime += tcp_sk(sk)->data_segs_out * LATENCY_PACKET_RUNTIME_WEIGHT;
-		current->se.vruntime += LATENCY_PACKET_RUNTIME_WEIGHT;
-	}
 #endif
 
 	rc = sk_wait_event(sk, timeo, skb_peek_tail(&sk->sk_receive_queue) != skb, &wait);

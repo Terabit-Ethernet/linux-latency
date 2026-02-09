@@ -1351,14 +1351,6 @@ new_segment:
 			}
 			sk->sk_log_index++;
 		}
-
-		if (sysctl_net_latency_dumb_schedule_tcp_send &&
-			sk->sk_protocol == IPPROTO_TCP &&
-			inet_sk(sk)->inet_saddr == in_aton(LATENCY_MONITOR_SOURCE_IP)) {
-			// current->se.vruntime += tcp_sk(sk)->data_segs_out * LATENCY_PACKET_RUNTIME_WEIGHT;
-			current->se.vruntime += LATENCY_PACKET_RUNTIME_WEIGHT;
-		}
-
 #endif
 
 		/* Where to copy to? */
@@ -1466,6 +1458,14 @@ out:
 	}
 out_nopush:
 	sock_zerocopy_put(uarg);
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (sysctl_net_latency_dumb_schedule_enable &&
+		sk->sk_protocol == IPPROTO_TCP &&
+		inet_sk(sk)->inet_saddr == in_aton(LATENCY_MONITOR_SOURCE_IP)) {
+		sk->sk_bytes_sent += 64;
+		current->se.vruntime = (u64)sk->sk_bytes_sent * sysctl_net_latency_dumb_schedule_weight;
+	}
+#endif
 	return copied + copied_syn;
 
 do_error:
@@ -2115,6 +2115,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	struct scm_timestamping_internal tss;
 	int cmsg_flags;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
+	int cpu;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 delta_irqtime;
 	u64 new_irqtime;
@@ -2382,7 +2383,9 @@ found_ok_skb:
 					printk("used:%lu element->size:%d %p", used, element->size, element);
 				} else {
 					element->size -= used;
-					if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0) { 
+					cpu = smp_processor_id();
+					if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0 &&
+						(cpu == 32 || cpu == 96)) { 
 						trace_printk("[latency-breakdown] source port: %u destination port: %u "
 										"-- rx -rx_sched: %lld timestamp: %lld\n", 
 										be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport), 
