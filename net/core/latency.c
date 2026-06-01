@@ -44,6 +44,9 @@ EXPORT_SYMBOL(sysctl_net_latency_dumb_schedule_weight);
 unsigned int sysctl_net_latency_dumb_schedule_disable_clamp __read_mostly = 0;
 EXPORT_SYMBOL(sysctl_net_latency_dumb_schedule_disable_clamp);
 
+unsigned int sysctl_net_latency_perstage_rdpmc_on __read_mostly = 0;
+EXPORT_SYMBOL(sysctl_net_latency_perstage_rdpmc_on);
+
 ktime_t latency_breakdown_irq_ts[CONFIG_NR_CPUS];
 EXPORT_SYMBOL(latency_breakdown_irq_ts);
 
@@ -53,4 +56,7 @@ EXPORT_SYMBOL(latency_breakdown_napi_ts);
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 DEFINE_PER_CPU(u64, latency_last_irqtime);
 EXPORT_PER_CPU_SYMBOL(latency_last_irqtime);
+
+DEFINE_PER_CPU(struct irq_pmu_counter, irq_pmu_counter_cpu);
+EXPORT_PER_CPU_SYMBOL(irq_pmu_counter_cpu);
 #endif

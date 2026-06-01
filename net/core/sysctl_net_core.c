@@ -580,13 +580,13 @@ static struct ctl_table net_core_table[] = {
 		.mode           = 0644,
 		.proc_handler   = proc_douintvec,
 	},
-        {
-                .procname       = "latency_rx_sched_lat_only",
-                .data           = &sysctl_net_latency_rx_sched_lat_only,
-                .maxlen         = sizeof(unsigned int),
-                .mode           = 0644,
-                .proc_handler   = proc_douintvec,
-        },
+	{
+		.procname       = "latency_rx_sched_lat_only",
+		.data           = &sysctl_net_latency_rx_sched_lat_only,
+		.maxlen         = sizeof(unsigned int),
+		.mode           = 0644,
+		.proc_handler   = proc_douintvec,
+	},
 	{
 		.procname       = "latency_breakdown_log",
 		.data           = &sysctl_net_latency_breakdown_log,
@@ -627,6 +627,13 @@ static struct ctl_table net_core_table[] = {
 	{
 		.procname	= "latency_dumb_schedule_disable_clamp",
 		.data		= &sysctl_net_latency_dumb_schedule_disable_clamp,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec,
+	},
+	{
+		.procname	= "latency_perstage_rdpmc_on",
+		.data		= &sysctl_net_latency_perstage_rdpmc_on,
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_douintvec,

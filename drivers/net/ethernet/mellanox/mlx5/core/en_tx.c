@@ -452,8 +452,11 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 			} else if (unlikely(delta_irqtime)) {
 				skb->tx_ts.tx_xmit_irq_delta = delta_irqtime;
 			}
-
-			latency_breakdown_print_valid_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+			if (sysctl_net_latency_perstage_rdpmc_on) {
+				latency_breakdown_print_rdpmc_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+			} else {
+				latency_breakdown_print_valid_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+			}
 		} else
 #endif
 		{
@@ -472,10 +475,6 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 			local_irq_restore(flags);
 		}
 #endif
-	}
-	if (sysctl_net_latency_dumb_schedule_complete && sk && sk->sk_protocol == IPPROTO_TCP) {
-		// current->se.vruntime += tcp_sk(sk)->data_segs_out * LATENCY_PACKET_RUNTIME_WEIGHT;
-		current->se.vruntime += LATENCY_PACKET_RUNTIME_WEIGHT;
 	}
 #endif
 }
