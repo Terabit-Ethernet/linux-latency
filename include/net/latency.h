@@ -23,6 +23,12 @@
 #define LATENCY_BREAKDOWN_LOG_DEFAULT 997
 #define LATENCY_MONITOR_SOURCE_IP "192.168.1.101"
 
+// #define LATENCY_FENCE() do { } while (0)
+#define LATENCY_FENCE() asm volatile("lfence" ::: "memory")
+
+// #define LATENCY_VALIDATION_SAMPLED(a, b) (a)%(b) == 0 || (a)%(b) == 1
+#define LATENCY_VALIDATION_SAMPLED(a, b) 1
+
 
 /* Sysctl variables to control latency measurements. */
 extern unsigned int sysctl_net_latency_breakdown_on;
@@ -66,12 +72,12 @@ extern ktime_t latency_breakdown_napi_ts[];
 struct irq_pmu_counter {
 	u64			pmu_0_last;
 	u64			pmu_1_last;
-	u64			pmu_2_last;
-	u64			pmu_3_last;
+	// u64			pmu_2_last;
+	// u64			pmu_3_last;
 	u64			pmu_0_irq_total;
 	u64			pmu_1_irq_total;
-	u64			pmu_2_irq_total;
-	u64			pmu_3_irq_total;
+	// u64			pmu_2_irq_total;
+	// u64			pmu_3_irq_total;
 };
 
 DECLARE_PER_CPU(struct irq_pmu_counter, irq_pmu_counter_cpu);
@@ -197,25 +203,25 @@ struct tx_timestamps_t {
 	// bookkeeping with last_*.
 	u64 last_pmu_0;
 	u64 last_pmu_1;
-	u64 last_pmu_2;
-	u64 last_pmu_3;
+	// u64 last_pmu_2;
+	// u64 last_pmu_3;
 	u64 last_pmu_0_irq_total;
 	u64 last_pmu_1_irq_total;
-	u64 last_pmu_2_irq_total;
-	u64 last_pmu_3_irq_total;
+	// u64 last_pmu_2_irq_total;
+	// u64 last_pmu_3_irq_total;
 	// we use these to print.
 	u64 rxc_pmu_0_delta;
 	u64 rxc_pmu_1_delta;
-	u64 rxc_pmu_2_delta;
-	u64 rxc_pmu_3_delta;
+	// u64 rxc_pmu_2_delta;
+	// u64 rxc_pmu_3_delta;
 	u64 app_pmu_0_delta;
 	u64 app_pmu_1_delta;
-	u64 app_pmu_2_delta;
-	u64 app_pmu_3_delta;
+	// u64 app_pmu_2_delta;
+	// u64 app_pmu_3_delta;
 	u64 txc_pmu_0_delta;
 	u64 txc_pmu_1_delta;
-	u64 txc_pmu_2_delta;
-	u64 txc_pmu_3_delta;
+	// u64 txc_pmu_2_delta;
+	// u64 txc_pmu_3_delta;
 #endif
 };
 
@@ -240,21 +246,21 @@ struct sock_timestamps_t {
 	// bookkeeping with last_*.
 	u64 last_pmu_0;
 	u64 last_pmu_1;
-	u64 last_pmu_2;
-	u64 last_pmu_3;
+	// u64 last_pmu_2;
+	// u64 last_pmu_3;
 	u64 last_pmu_0_irq_total;
 	u64 last_pmu_1_irq_total;
-	u64 last_pmu_2_irq_total;
-	u64 last_pmu_3_irq_total;
+	// u64 last_pmu_2_irq_total;
+	// u64 last_pmu_3_irq_total;
 	// recording for print.
 	u64 rxc_pmu_0_delta;
 	u64 rxc_pmu_1_delta;
-	u64 rxc_pmu_2_delta;
-	u64 rxc_pmu_3_delta;
+	// u64 rxc_pmu_2_delta;
+	// u64 rxc_pmu_3_delta;
 	u64 app_pmu_0_delta;
 	u64 app_pmu_1_delta;
-	u64 app_pmu_2_delta;
-	u64 app_pmu_3_delta;
+	// u64 app_pmu_2_delta;
+	// u64 app_pmu_3_delta;
 #endif
 };
 
@@ -367,7 +373,7 @@ static inline void latency_breakdown_print_rdpmc_log(unsigned int sport, unsigne
 		"-- tx -- alloc: %lld write: %lld data copy: %lld tcp: %lld ip: %lld queue: %lld xmit: %lld finish: %lld "
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		"-- last_xmit_finish: %lld valid: %u 1: %u 2: %u 3: %u 4: %u 5: %u 6: %u 7: %u 8: %u 9: %u 10: %u "
-		"p0: %lld p1: %lld p2: %lld p3: %lld p4: %lld p5: %lld p6: %lld p7: %lld p8: %lld p9: %lld p10: %lld p11: %lld"
+		"p0: %lld p1: %lld p2: %lld p3: %lld p4: %lld p5: %lld"// p6: %lld p7: %lld p8: %lld p9: %lld p10: %lld p11: %lld"
 #endif
 		"\n",
 		sport,
@@ -409,16 +415,16 @@ static inline void latency_breakdown_print_rdpmc_log(unsigned int sport, unsigne
 		tx_ts.tx_xmit_irq_delta,
 		tx_ts.rxc_pmu_0_delta,
 		tx_ts.rxc_pmu_1_delta,
-		tx_ts.rxc_pmu_2_delta,
-		tx_ts.rxc_pmu_3_delta,
+		// tx_ts.rxc_pmu_2_delta,
+		// tx_ts.rxc_pmu_3_delta,
 		tx_ts.app_pmu_0_delta,
 		tx_ts.app_pmu_1_delta,
-		tx_ts.app_pmu_2_delta,
-		tx_ts.app_pmu_3_delta,
+		// tx_ts.app_pmu_2_delta,
+		// tx_ts.app_pmu_3_delta,
 		tx_ts.txc_pmu_0_delta,
-		tx_ts.txc_pmu_1_delta,
-		tx_ts.txc_pmu_2_delta,
-		tx_ts.txc_pmu_3_delta
+		tx_ts.txc_pmu_1_delta
+		// tx_ts.txc_pmu_2_delta
+		// tx_ts.txc_pmu_3_delta
 #endif
 	);
 }

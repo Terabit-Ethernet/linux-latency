@@ -88,28 +88,29 @@ void irqtime_account_irq(struct task_struct *curr)
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (likely(sysctl_net_latency_perstage_rdpmc_on)) {
 		struct irq_pmu_counter *counter = this_cpu_ptr(&irq_pmu_counter_cpu);
-		u64 p0, p1, p2, p3, d0, d1, d2, d3;
+		u64 p0, p1; //, p2, p3;
+		u64 d0, d1; //, d2, d3;
 		bool in_irqlike = hardirq_count() || 
 						(in_serving_softirq() && curr != this_cpu_ksoftirqd());
 		// [ame] Not sure if we need lfence...
-		asm volatile("lfence" ::: "memory");
+		LATENCY_FENCE();
 		p0 = latency_rdpmc_nofence(0);
 		p1 = latency_rdpmc_nofence(1);
-		p2 = latency_rdpmc_nofence(2);
-		p3 = latency_rdpmc_nofence(3);
+		// p2 = latency_rdpmc_nofence(2);
+		// p3 = latency_rdpmc_nofence(3);
 		d0 = p0 - counter->pmu_0_last;
 		d1 = p1 - counter->pmu_1_last;
-		d2 = p2 - counter->pmu_2_last;
-		d3 = p3 - counter->pmu_3_last;
+		// d2 = p2 - counter->pmu_2_last;
+		// d3 = p3 - counter->pmu_3_last;
 		counter->pmu_0_last = p0;
 		counter->pmu_1_last = p1;
-		counter->pmu_2_last = p2;
-		counter->pmu_3_last = p3;
+		// counter->pmu_2_last = p2;
+		// counter->pmu_3_last = p3;
 		if (in_irqlike) {
 			counter->pmu_0_irq_total += d0;
 			counter->pmu_1_irq_total += d1;
-			counter->pmu_2_irq_total += d2;
-			counter->pmu_3_irq_total += d3;
+			// counter->pmu_2_irq_total += d2;
+			// counter->pmu_3_irq_total += d3;
 		}
 	}
 #endif /* CONFIG_NET_LATENCY */

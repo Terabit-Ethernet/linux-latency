@@ -1348,21 +1348,21 @@ new_segment:
 					if(sysctl_net_latency_perstage_rdpmc_on) {
 						skb->tx_ts.app_pmu_0_delta = sk->sk_ts.app_pmu_0_delta;
 						skb->tx_ts.app_pmu_1_delta = sk->sk_ts.app_pmu_1_delta;
-						skb->tx_ts.app_pmu_2_delta = sk->sk_ts.app_pmu_2_delta;
-						skb->tx_ts.app_pmu_3_delta = sk->sk_ts.app_pmu_3_delta;
+						// skb->tx_ts.app_pmu_2_delta = sk->sk_ts.app_pmu_2_delta;
+						// skb->tx_ts.app_pmu_3_delta = sk->sk_ts.app_pmu_3_delta;
 						skb->tx_ts.rxc_pmu_0_delta = sk->sk_ts.rxc_pmu_0_delta;
 						skb->tx_ts.rxc_pmu_1_delta = sk->sk_ts.rxc_pmu_1_delta;
-						skb->tx_ts.rxc_pmu_2_delta = sk->sk_ts.rxc_pmu_2_delta;
-						skb->tx_ts.rxc_pmu_3_delta = sk->sk_ts.rxc_pmu_3_delta;
+						// skb->tx_ts.rxc_pmu_2_delta = sk->sk_ts.rxc_pmu_2_delta;
+						// skb->tx_ts.rxc_pmu_3_delta = sk->sk_ts.rxc_pmu_3_delta;
 						// also need to copy last_pmu_* snapshot
 						skb->tx_ts.last_pmu_0 = sk->sk_ts.last_pmu_0;
 						skb->tx_ts.last_pmu_1 = sk->sk_ts.last_pmu_1;
-						skb->tx_ts.last_pmu_2 = sk->sk_ts.last_pmu_2;
-						skb->tx_ts.last_pmu_3 = sk->sk_ts.last_pmu_3;
+						// skb->tx_ts.last_pmu_2 = sk->sk_ts.last_pmu_2;
+						// skb->tx_ts.last_pmu_3 = sk->sk_ts.last_pmu_3;
 						skb->tx_ts.last_pmu_0_irq_total = sk->sk_ts.last_pmu_0_irq_total;
 						skb->tx_ts.last_pmu_1_irq_total = sk->sk_ts.last_pmu_1_irq_total;
-						skb->tx_ts.last_pmu_2_irq_total = sk->sk_ts.last_pmu_2_irq_total;
-						skb->tx_ts.last_pmu_3_irq_total = sk->sk_ts.last_pmu_3_irq_total;
+						// skb->tx_ts.last_pmu_2_irq_total = sk->sk_ts.last_pmu_2_irq_total;
+						// skb->tx_ts.last_pmu_3_irq_total = sk->sk_ts.last_pmu_3_irq_total;
 					}
 				}
 #endif
@@ -1514,16 +1514,18 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 	u64 delta_irqtime;
 	u64 new_irqtime;
 	u64 new_csw;
-	u64 new_pmu_0, new_pmu_1, new_pmu_2, new_pmu_3;
-	u64 new_pmu_0_total, new_pmu_1_total, new_pmu_2_total, new_pmu_3_total;
+	u64 new_pmu_0, new_pmu_1; //, new_pmu_2, new_pmu_3;
+	u64 new_pmu_0_total, new_pmu_1_total; //, new_pmu_2_total, new_pmu_3_total;
 	unsigned long flags;
 #endif
 #endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
+	int is_sampled = LATENCY_VALIDATION_SAMPLED(sk->sk_log_index, 
+						sysctl_net_latency_breakdown_log);
 	if (sysctl_net_latency_breakdown_on) {
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-		if (sysctl_net_latency_breakdown_validation) {
+		if (sysctl_net_latency_breakdown_validation && is_sampled) {
 			struct irq_pmu_counter *irq_pmu_counter = 
 											this_cpu_ptr(&irq_pmu_counter_cpu);
 			local_irq_save(flags);
@@ -1531,15 +1533,15 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 			new_irqtime = public_irq_time_read(smp_processor_id());
 			new_csw = current->nivcsw + current->nvcsw;
 			if (sysctl_net_latency_perstage_rdpmc_on) {
-				asm volatile("lfence" ::: "memory");
+				LATENCY_FENCE();
 				new_pmu_0 = latency_rdpmc_nofence(0);
 				new_pmu_1 = latency_rdpmc_nofence(1);
-				new_pmu_2 = latency_rdpmc_nofence(2);
-				new_pmu_3 = latency_rdpmc_nofence(3);
+				// new_pmu_2 = latency_rdpmc_nofence(2);
+				// new_pmu_3 = latency_rdpmc_nofence(3);
 				new_pmu_0_total = irq_pmu_counter->pmu_0_irq_total;
 				new_pmu_1_total = irq_pmu_counter->pmu_1_irq_total;
-				new_pmu_2_total = irq_pmu_counter->pmu_2_irq_total;
-				new_pmu_3_total = irq_pmu_counter->pmu_3_irq_total;
+				// new_pmu_2_total = irq_pmu_counter->pmu_2_irq_total;
+				// new_pmu_3_total = irq_pmu_counter->pmu_3_irq_total;
 			}
 			local_irq_restore(flags);
 
@@ -1559,18 +1561,18 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 							(new_pmu_0_total - sk->sk_ts.last_pmu_0_irq_total);
 				sk->sk_ts.app_pmu_1_delta = (new_pmu_1 - sk->sk_ts.last_pmu_1) - 
 							(new_pmu_1_total - sk->sk_ts.last_pmu_1_irq_total);
-				sk->sk_ts.app_pmu_2_delta = (new_pmu_2 - sk->sk_ts.last_pmu_2) - 
-							(new_pmu_2_total - sk->sk_ts.last_pmu_2_irq_total);
-				sk->sk_ts.app_pmu_3_delta = (new_pmu_3 - sk->sk_ts.last_pmu_3) -
-							(new_pmu_3_total - sk->sk_ts.last_pmu_3_irq_total);
+				// sk->sk_ts.app_pmu_2_delta = (new_pmu_2 - sk->sk_ts.last_pmu_2) - 
+				// 			(new_pmu_2_total - sk->sk_ts.last_pmu_2_irq_total);
+				// sk->sk_ts.app_pmu_3_delta = (new_pmu_3 - sk->sk_ts.last_pmu_3) -
+				// 			(new_pmu_3_total - sk->sk_ts.last_pmu_3_irq_total);
 				sk->sk_ts.last_pmu_0 = new_pmu_0;
 				sk->sk_ts.last_pmu_1 = new_pmu_1;
-				sk->sk_ts.last_pmu_2 = new_pmu_2;
-				sk->sk_ts.last_pmu_3 = new_pmu_3;
+				// sk->sk_ts.last_pmu_2 = new_pmu_2;
+				// sk->sk_ts.last_pmu_3 = new_pmu_3;
 				sk->sk_ts.last_pmu_0_irq_total = new_pmu_0_total;
 				sk->sk_ts.last_pmu_1_irq_total = new_pmu_1_total;
-				sk->sk_ts.last_pmu_2_irq_total = new_pmu_2_total;
-				sk->sk_ts.last_pmu_3_irq_total = new_pmu_3_total;
+				// sk->sk_ts.last_pmu_2_irq_total = new_pmu_2_total;
+				// sk->sk_ts.last_pmu_3_irq_total = new_pmu_3_total;
 			}
 		} else
 #endif
@@ -2173,13 +2175,15 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	u64 delta_irqtime;
 	u64 new_irqtime;
 	u64 new_csw;
-	u64 new_pmu_0, new_pmu_1, new_pmu_2, new_pmu_3;
-	u64 new_pmu_0_total, new_pmu_1_total, new_pmu_2_total, new_pmu_3_total;
+	u64 new_pmu_0, new_pmu_1; //, new_pmu_2, new_pmu_3;
+	u64 new_pmu_0_total, new_pmu_1_total; //, new_pmu_2_total, new_pmu_3_total;
 	unsigned long irq_flags;
 #endif
+	int is_sampled = LATENCY_VALIDATION_SAMPLED(sk->sk_log_index, 
+						sysctl_net_latency_breakdown_log);
 	if (sysctl_net_latency_breakdown_on) {
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-		if (sysctl_net_latency_breakdown_validation) {
+		if (sysctl_net_latency_breakdown_validation && is_sampled) {
 			local_irq_save(irq_flags);
 			sk->sk_ts.read_enter = ktime_get_real();
 			new_irqtime = public_irq_time_read(smp_processor_id());
@@ -2202,12 +2206,12 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 				// clean the results of per-stage PMU counters.
 				sk->sk_ts.app_pmu_0_delta = 0;
 				sk->sk_ts.app_pmu_1_delta = 0;
-				sk->sk_ts.app_pmu_2_delta = 0;
-				sk->sk_ts.app_pmu_3_delta = 0;
+				// sk->sk_ts.app_pmu_2_delta = 0;
+				// sk->sk_ts.app_pmu_3_delta = 0;
 				sk->sk_ts.rxc_pmu_0_delta = 0;
 				sk->sk_ts.rxc_pmu_1_delta = 0;
-				sk->sk_ts.rxc_pmu_2_delta = 0;
-				sk->sk_ts.rxc_pmu_3_delta = 0;
+				// sk->sk_ts.rxc_pmu_2_delta = 0;
+				// sk->sk_ts.rxc_pmu_3_delta = 0;
 			}
 
 			if (unlikely(new_csw != sk->sk_ts.last_csw)) {
@@ -2408,7 +2412,7 @@ found_ok_skb:
 				 * not for delta_irqtime and pmu_delta. With single io-depth the 
 				 * results will not be affected since one packet is one skb. 
 				 */
-				if (sysctl_net_latency_breakdown_validation) {
+				if (sysctl_net_latency_breakdown_validation && is_sampled) {
 					struct irq_pmu_counter *irq_pmu_counter = 
 											this_cpu_ptr(&irq_pmu_counter_cpu);
 					local_irq_save(irq_flags);
@@ -2419,15 +2423,15 @@ found_ok_skb:
 					new_irqtime = public_irq_time_read(smp_processor_id());
 					new_csw = current->nvcsw + current->nivcsw;
 					if (sysctl_net_latency_perstage_rdpmc_on) {
-						asm volatile("lfence" ::: "memory");
+						LATENCY_FENCE();
 						new_pmu_0 = latency_rdpmc_nofence(0);
 						new_pmu_1 = latency_rdpmc_nofence(1);
-						new_pmu_2 = latency_rdpmc_nofence(2);
-						new_pmu_3 = latency_rdpmc_nofence(3);
+						// new_pmu_2 = latency_rdpmc_nofence(2);
+						// new_pmu_3 = latency_rdpmc_nofence(3);
 						new_pmu_0_total = irq_pmu_counter->pmu_0_irq_total;
 						new_pmu_1_total = irq_pmu_counter->pmu_1_irq_total;
-						new_pmu_2_total = irq_pmu_counter->pmu_2_irq_total;
-						new_pmu_3_total = irq_pmu_counter->pmu_3_irq_total;
+						// new_pmu_2_total = irq_pmu_counter->pmu_2_irq_total;
+						// new_pmu_3_total = irq_pmu_counter->pmu_3_irq_total;
 					}
 					local_irq_restore(irq_flags);
 
@@ -2447,12 +2451,12 @@ found_ok_skb:
 					if (sysctl_net_latency_perstage_rdpmc_on) {
 						sk->sk_ts.last_pmu_0 = new_pmu_0;
 						sk->sk_ts.last_pmu_1 = new_pmu_1;
-						sk->sk_ts.last_pmu_2 = new_pmu_2;
-						sk->sk_ts.last_pmu_3 = new_pmu_3;
+						// sk->sk_ts.last_pmu_2 = new_pmu_2;
+						// sk->sk_ts.last_pmu_3 = new_pmu_3;
 						sk->sk_ts.last_pmu_0_irq_total = new_pmu_0_total;
 						sk->sk_ts.last_pmu_1_irq_total = new_pmu_1_total;
-						sk->sk_ts.last_pmu_2_irq_total = new_pmu_2_total;
-						sk->sk_ts.last_pmu_3_irq_total = new_pmu_3_total;
+						// sk->sk_ts.last_pmu_2_irq_total = new_pmu_2_total;
+						// sk->sk_ts.last_pmu_3_irq_total = new_pmu_3_total;
 					}
 
 				} else
@@ -2563,7 +2567,7 @@ found_fin_ok:
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
-		if (sysctl_net_latency_breakdown_validation) {
+		if (sysctl_net_latency_breakdown_validation && is_sampled) {
 			struct irq_pmu_counter *irq_pmu_counter = 
 											this_cpu_ptr(&irq_pmu_counter_cpu);
 			local_irq_save(irq_flags);
@@ -2571,15 +2575,15 @@ found_fin_ok:
 			new_irqtime = public_irq_time_read(smp_processor_id());
 			new_csw = current->nvcsw + current->nivcsw;
 			if (sysctl_net_latency_perstage_rdpmc_on) {
-				asm volatile("lfence" ::: "memory");
+				LATENCY_FENCE();
 				new_pmu_0 = latency_rdpmc_nofence(0);
 				new_pmu_1 = latency_rdpmc_nofence(1);
-				new_pmu_2 = latency_rdpmc_nofence(2);
-				new_pmu_3 = latency_rdpmc_nofence(3);
+				// new_pmu_2 = latency_rdpmc_nofence(2);
+				// new_pmu_3 = latency_rdpmc_nofence(3);
 				new_pmu_0_total = irq_pmu_counter->pmu_0_irq_total;
 				new_pmu_1_total = irq_pmu_counter->pmu_1_irq_total;
-				new_pmu_2_total = irq_pmu_counter->pmu_2_irq_total;
-				new_pmu_3_total = irq_pmu_counter->pmu_3_irq_total;
+				// new_pmu_2_total = irq_pmu_counter->pmu_2_irq_total;
+				// new_pmu_3_total = irq_pmu_counter->pmu_3_irq_total;
 			}
 			local_irq_restore(irq_flags);
 
@@ -2600,18 +2604,18 @@ found_fin_ok:
 							(new_pmu_0_total - sk->sk_ts.last_pmu_0_irq_total);
 				sk->sk_ts.rxc_pmu_1_delta = (new_pmu_1 - sk->sk_ts.last_pmu_1) -
 							(new_pmu_1_total - sk->sk_ts.last_pmu_1_irq_total);
-				sk->sk_ts.rxc_pmu_2_delta = (new_pmu_2 - sk->sk_ts.last_pmu_2) -
-							(new_pmu_2_total - sk->sk_ts.last_pmu_2_irq_total);
-				sk->sk_ts.rxc_pmu_3_delta = (new_pmu_3 - sk->sk_ts.last_pmu_3) -
-							(new_pmu_3_total - sk->sk_ts.last_pmu_3_irq_total);
+				// sk->sk_ts.rxc_pmu_2_delta = (new_pmu_2 - sk->sk_ts.last_pmu_2) -
+				// 			(new_pmu_2_total - sk->sk_ts.last_pmu_2_irq_total);
+				// sk->sk_ts.rxc_pmu_3_delta = (new_pmu_3 - sk->sk_ts.last_pmu_3) -
+				// 			(new_pmu_3_total - sk->sk_ts.last_pmu_3_irq_total);
 				sk->sk_ts.last_pmu_0 = new_pmu_0;
 				sk->sk_ts.last_pmu_1 = new_pmu_1;
-				sk->sk_ts.last_pmu_2 = new_pmu_2;
-				sk->sk_ts.last_pmu_3 = new_pmu_3;
+				// sk->sk_ts.last_pmu_2 = new_pmu_2;
+				// sk->sk_ts.last_pmu_3 = new_pmu_3;
 				sk->sk_ts.last_pmu_0_irq_total = new_pmu_0_total;
 				sk->sk_ts.last_pmu_1_irq_total = new_pmu_1_total;
-				sk->sk_ts.last_pmu_2_irq_total = new_pmu_2_total;
-				sk->sk_ts.last_pmu_3_irq_total = new_pmu_3_total;
+				// sk->sk_ts.last_pmu_2_irq_total = new_pmu_2_total;
+				// sk->sk_ts.last_pmu_3_irq_total = new_pmu_3_total;
 			}
 		} else 
 #endif
