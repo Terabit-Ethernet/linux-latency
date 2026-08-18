@@ -8,6 +8,7 @@
  * Version:	@(#)latency.h	1.0.0	06/10/21
  *
  * Authors:	Shubham Chaudhary, <shubhamchaudhary1996@gmail.com>
+ * 			Tianyu Zuo, <ty.zuo@outlook.com>
  */
 #ifndef _LATENCY_H
 #define _LATENCY_H
