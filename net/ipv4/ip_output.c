@@ -82,6 +82,10 @@
 #include <linux/netfilter_bridge.h>
 #include <linux/netlink.h>
 #include <linux/tcp.h>
+#include <linux/smp.h>
+#include <linux/kernel_stat.h>
+#include <linux/percpu.h>
+#include <linux/sched.h>
 
 static int
 ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
@@ -460,10 +464,40 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	struct rtable *rt;
 	struct iphdr *iph;
 	int res;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 delta_irqtime;
+	u64 new_irqtime;
+	u64 new_csw;
+	unsigned long flags;
+#endif
+#endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on && skb->sport) {
-		skb->tx_ts.ip = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(flags);
+			skb->tx_ts.ip = ktime_get_real();
+			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nvcsw + current->nivcsw;
+			local_irq_restore(flags);
+
+			delta_irqtime = new_irqtime - skb->tx_ts.last_irqtime;
+
+			if (unlikely(new_csw != skb->tx_ts.last_csw)) {
+				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_TCP_PROC_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				skb->tx_ts.tx_tcp_irq_delta = delta_irqtime;
+			}
+
+			skb->tx_ts.last_irqtime = new_irqtime;
+			skb->tx_ts.last_csw = new_csw;
+		} else
+#endif
+		{
+			skb->tx_ts.ip = ktime_get_real();
+		}
 	}
 #endif
 

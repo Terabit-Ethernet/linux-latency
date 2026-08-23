@@ -32,6 +32,10 @@
 
 #include <linux/tcp.h>
 #include <linux/if_vlan.h>
+#include <linux/smp.h>
+#include <linux/kernel_stat.h>
+#include <linux/sched.h>
+#include <linux/irqflags.h>
 #include <net/geneve.h>
 #include <net/dsfield.h>
 #include "en.h"
@@ -39,6 +43,7 @@
 #include "ipoib/ipoib.h"
 #include "en_accel/en_accel.h"
 #include "lib/clock.h"
+
 
 static void mlx5e_dma_unmap_wqe_err(struct mlx5e_txqsq *sq, u8 num_dma)
 {
@@ -384,6 +389,16 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 {
 	struct mlx5_wq_cyc *wq = &sq->wq;
 	bool send_doorbell;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	struct sock *sk;
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 delta_irqtime;
+	u64 new_irqtime;
+	u64 new_csw;
+	int cpu;
+	unsigned long flags;
+#endif
+#endif
 
 	*wi = (struct mlx5e_tx_wqe_info) {
 		.skb = skb,
@@ -406,10 +421,60 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	if (send_doorbell)
 		mlx5e_notify_hw(wq, sq->pc, sq->uar_map, cseg);
 
+	/*
+	 * @amefumi:
+	 * 1. From the perspective of packet lifetime (and xmit processing time), we update
+	 *	  skb->tx_ts.xmit_finish (and irqtime/csw if we are to measure processing time)
+	 *    first, and then print the latency breakdown log, only when packet is sampled.
+	 * 2. When we are to measure processing time, we update skb->sk's xmit_finish
+	 *    timestamp, which is the time after logging to avoid printing overhead on 
+	 *    processing time estimation.
+	 * 3. The dumb (or naive) packet-cound-based scheduling is indenpendent of measurement,
+	 *    thus we do it at the end out of the measurement conditionals.
+	 */
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	if (sysctl_net_latency_breakdown_on && skb->sport) {
-		skb->tx_ts.xmit_finish = ktime_get_real();
-		latency_breakdown_print_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+	sk = skb->sk;
+	cpu = smp_processor_id();
+	if (sysctl_net_latency_breakdown_on && skb->sport && (cpu == 32 || cpu == 96)) {
+		// only sample packets on cpu 32 and 96 for now
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(flags);
+			skb->tx_ts.xmit_finish = ktime_get_real();
+			new_irqtime = public_irq_time_read(cpu);
+			new_csw = current->nvcsw + current->nivcsw;
+			local_irq_restore(flags);
+
+			delta_irqtime = new_irqtime - skb->tx_ts.last_irqtime;
+
+			if (unlikely(new_csw != skb->tx_ts.last_csw)) {
+				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_XMIT_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				skb->tx_ts.tx_xmit_irq_delta = delta_irqtime;
+			}
+			if (sysctl_net_latency_perstage_rdpmc_on) {
+				latency_breakdown_print_rdpmc_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+			} else {
+				latency_breakdown_print_valid_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+			}
+		} else
+#endif
+		{
+			skb->tx_ts.xmit_finish = ktime_get_real();
+			
+			latency_breakdown_print_log(skb->sport, skb->dport, skb->rx_ts, skb->tx_ts);
+		}
+		
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		// after all I decide to give up half of the hidden_app for performance
+		if (sysctl_net_latency_breakdown_validation && sk) {
+			local_irq_save(flags);
+			sk->sk_ts.last_xmit_finish = ktime_get_real();
+			sk->sk_ts.last_irqtime = public_irq_time_read(cpu);
+			sk->sk_ts.last_csw = current->nvcsw + current->nivcsw;
+			local_irq_restore(flags);
+		}
+#endif
 	}
 #endif
 }
@@ -641,10 +706,42 @@ netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct mlx5e_tx_wqe *wqe;
 	struct mlx5e_txqsq *sq;
 	u16 pi;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 delta_irqtime;
+	u64 new_irqtime;
+	u64 new_csw;
+	unsigned long flags;
+#endif
+#endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on && skb->sport) {
-		skb->tx_ts.xmit = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(flags);
+			skb->tx_ts.xmit = ktime_get_real();
+			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nvcsw + current->nivcsw;
+			local_irq_restore(flags);
+
+			delta_irqtime = new_irqtime - skb->tx_ts.last_irqtime;
+
+			if (unlikely(new_csw != skb->tx_ts.last_csw)) {
+				LATENCY_STAGE_MARK_INVALID(skb->tx_ts.valid, STAGE_TX_QUEUE_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				skb->tx_ts.tx_queue_irq_delta = delta_irqtime;
+			}
+			
+			// Anyway we need to update the last_csw and last_irqtime
+			skb->tx_ts.last_csw = new_csw;
+			skb->tx_ts.last_irqtime = new_irqtime;
+			
+		} else
+#endif
+		{
+			skb->tx_ts.xmit = ktime_get_real();
+		}
 	}
 #endif
 

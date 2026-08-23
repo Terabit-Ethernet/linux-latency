@@ -216,7 +216,8 @@ struct sock_common {
 	};
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-	unsigned int			sk_log_index;
+	unsigned int				sk_log_index;
+	unsigned long long			sk_bytes_sent;
 	struct rx_timestamps_t		sk_rcv_skb_ts;
 	struct sock_timestamps_t	sk_ts;
 #endif
@@ -393,8 +394,9 @@ struct sock {
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 #define sk_log_index		__sk_common.sk_log_index
+#define sk_bytes_sent		__sk_common.sk_bytes_sent
 #define sk_rcv_skb_ts		__sk_common.sk_rcv_skb_ts
-#define sk_ts			__sk_common.sk_ts
+#define sk_ts				__sk_common.sk_ts
 #endif
 
 	socket_lock_t		sk_lock;

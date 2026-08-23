@@ -102,6 +102,7 @@
 #include <linux/string.h>
 #include <linux/sockios.h>
 #include <linux/net.h>
+#include <linux/inet.h>
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/interrupt.h>
@@ -2568,10 +2569,63 @@ int sk_wait_data(struct sock *sk, long *timeo, const struct sk_buff *skb)
 {
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
 	int rc;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 delta_irqtime;
+	u64 new_irqtime;
+	u64 new_csw;
+	unsigned long irq_flags;
+#endif
+#endif
 
 	add_wait_queue(sk_sleep(sk), &wait);
 	sk_set_bit(SOCKWQ_ASYNC_WAITDATA, sk);
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (sysctl_net_latency_breakdown_on) {
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(irq_flags);
+			sk->sk_ts.sleep_enter = ktime_get_real();
+			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nvcsw + current->nivcsw;
+			local_irq_restore(irq_flags);
+
+			// sk->sk_ts.last_irqtime is updated in last tx_xmit_finish
+			delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+			if (unlikely(new_csw != READ_ONCE(sk->sk_ts.last_csw))) {
+				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_SLEEP_PREPARE_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				sk->sk_ts.sleep_prepare_irq_delta = delta_irqtime;
+			}
+
+			// no need to update last_irqtime and last_csw here
+		} else
+#endif
+		{	
+			sk->sk_ts.sleep_enter = ktime_get_real();
+		}
+	}
+#endif
+
 	rc = sk_wait_event(sk, timeo, skb_peek_tail(&sk->sk_receive_queue) != skb, &wait);
+
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (sysctl_net_latency_breakdown_on) {
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		if (sysctl_net_latency_breakdown_validation) {
+			local_irq_save(irq_flags);
+			sk->sk_ts.wake_up = ktime_get_real();
+			sk->sk_ts.last_irqtime = public_irq_time_read(smp_processor_id());
+			sk->sk_ts.last_csw = current->nvcsw + current->nivcsw;
+			local_irq_restore(irq_flags);
+		} else
+#endif
+		{
+			sk->sk_ts.wake_up = ktime_get_real();
+		}
+	}
+#endif
 	sk_clear_bit(SOCKWQ_ASYNC_WAITDATA, sk);
 	remove_wait_queue(sk_sleep(sk), &wait);
 	return rc;

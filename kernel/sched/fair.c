@@ -21,6 +21,7 @@
  *  Copyright (C) 2007 Red Hat, Inc., Peter Zijlstra
  */
 #include "sched.h"
+#include <net/latency.h>
 
 /*
  * Targeted preemption latency for CPU-bound tasks:
@@ -4169,6 +4170,9 @@ place_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int initial)
 	}
 
 	/* ensure we never gain time by being placed backwards. */
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (unlikely(!sysctl_net_latency_dumb_schedule_disable_clamp))
+#endif
 	se->vruntime = max_vruntime(se->vruntime, vruntime);
 }
 

@@ -268,6 +268,9 @@
 #include <linux/errqueue.h>
 #include <linux/static_key.h>
 #include <linux/inet.h>
+#include <linux/smp.h>
+#include <linux/kernel_stat.h>
+#include <linux/sched.h>
 #include <net/icmp.h>
 #include <net/inet_common.h>
 #include <net/tcp.h>
@@ -275,6 +278,7 @@
 #include <net/xfrm.h>
 #include <net/ip.h>
 #include <net/sock.h>
+#include <linux/irqflags.h>
 
 #include <linux/uaccess.h>
 #include <asm/ioctls.h>
@@ -1330,6 +1334,38 @@ new_segment:
 				skb->dport = be16_to_cpu(sk->sk_dport);
 				skb->sport = be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport);
 				skb->tx_ts.write_enter = sk->sk_ts.write_enter;
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+				if (sysctl_net_latency_breakdown_validation) {
+					skb->tx_ts.last_xmit_finish = sk->sk_ts.last_xmit_finish;
+					skb->tx_ts.last_csw = sk->sk_ts.last_csw;
+					skb->tx_ts.last_irqtime = sk->sk_ts.last_irqtime;
+					skb->tx_ts.valid = sk->sk_ts.valid;
+					skb->tx_ts.hidden_app_irq_delta = sk->sk_ts.hidden_app_irq_delta;
+					skb->tx_ts.sleep_prepare_irq_delta = sk->sk_ts.sleep_prepare_irq_delta;
+					skb->tx_ts.sleep_wake_up_irq_delta = sk->sk_ts.sleep_wake_up_irq_delta;
+					skb->tx_ts.rx_data_copy_irq_delta = sk->sk_ts.rx_data_copy_irq_delta;
+					skb->tx_ts.application_irq_delta = sk->sk_ts.application_irq_delta;
+					if(sysctl_net_latency_perstage_rdpmc_on) {
+						skb->tx_ts.app_pmu_0_delta = sk->sk_ts.app_pmu_0_delta;
+						skb->tx_ts.app_pmu_1_delta = sk->sk_ts.app_pmu_1_delta;
+						// skb->tx_ts.app_pmu_2_delta = sk->sk_ts.app_pmu_2_delta;
+						// skb->tx_ts.app_pmu_3_delta = sk->sk_ts.app_pmu_3_delta;
+						skb->tx_ts.rxc_pmu_0_delta = sk->sk_ts.rxc_pmu_0_delta;
+						skb->tx_ts.rxc_pmu_1_delta = sk->sk_ts.rxc_pmu_1_delta;
+						// skb->tx_ts.rxc_pmu_2_delta = sk->sk_ts.rxc_pmu_2_delta;
+						// skb->tx_ts.rxc_pmu_3_delta = sk->sk_ts.rxc_pmu_3_delta;
+						// also need to copy last_pmu_* snapshot
+						skb->tx_ts.last_pmu_0 = sk->sk_ts.last_pmu_0;
+						skb->tx_ts.last_pmu_1 = sk->sk_ts.last_pmu_1;
+						// skb->tx_ts.last_pmu_2 = sk->sk_ts.last_pmu_2;
+						// skb->tx_ts.last_pmu_3 = sk->sk_ts.last_pmu_3;
+						skb->tx_ts.last_pmu_0_irq_total = sk->sk_ts.last_pmu_0_irq_total;
+						skb->tx_ts.last_pmu_1_irq_total = sk->sk_ts.last_pmu_1_irq_total;
+						// skb->tx_ts.last_pmu_2_irq_total = sk->sk_ts.last_pmu_2_irq_total;
+						// skb->tx_ts.last_pmu_3_irq_total = sk->sk_ts.last_pmu_3_irq_total;
+					}
+				}
+#endif
 				skb->rx_ts = sk->sk_rcv_skb_ts;
 			}
 			sk->sk_log_index++;
@@ -1441,6 +1477,14 @@ out:
 	}
 out_nopush:
 	sock_zerocopy_put(uarg);
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+	if (sysctl_net_latency_dumb_schedule_enable &&
+		sk->sk_protocol == IPPROTO_TCP &&
+		inet_sk(sk)->inet_saddr == in_aton(LATENCY_MONITOR_SOURCE_IP)) {
+		sk->sk_bytes_sent += 64;
+		current->se.vruntime = (u64)sk->sk_bytes_sent * sysctl_net_latency_dumb_schedule_weight;
+	}
+#endif
 	return copied + copied_syn;
 
 do_error:
@@ -1465,10 +1509,76 @@ EXPORT_SYMBOL_GPL(tcp_sendmsg_locked);
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 {
 	int ret;
+#if IS_ENABLED(CONFIG_NET_LATENCY)
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 delta_irqtime;
+	u64 new_irqtime;
+	u64 new_csw;
+	u64 new_pmu_0, new_pmu_1; //, new_pmu_2, new_pmu_3;
+	u64 new_pmu_0_total, new_pmu_1_total; //, new_pmu_2_total, new_pmu_3_total;
+	unsigned long flags;
+#endif
+#endif
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
+	int is_sampled = LATENCY_VALIDATION_SAMPLED(sk->sk_log_index, 
+						sysctl_net_latency_breakdown_log);
 	if (sysctl_net_latency_breakdown_on) {
-		sk->sk_ts.write_enter = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		if (sysctl_net_latency_breakdown_validation && is_sampled) {
+			struct irq_pmu_counter *irq_pmu_counter = 
+											this_cpu_ptr(&irq_pmu_counter_cpu);
+			local_irq_save(flags);
+			sk->sk_ts.write_enter = ktime_get_real();
+			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nivcsw + current->nvcsw;
+			if (sysctl_net_latency_perstage_rdpmc_on) {
+				LATENCY_FENCE();
+				new_pmu_0 = latency_rdpmc_nofence(0);
+				new_pmu_1 = latency_rdpmc_nofence(1);
+				// new_pmu_2 = latency_rdpmc_nofence(2);
+				// new_pmu_3 = latency_rdpmc_nofence(3);
+				new_pmu_0_total = irq_pmu_counter->pmu_0_irq_total;
+				new_pmu_1_total = irq_pmu_counter->pmu_1_irq_total;
+				// new_pmu_2_total = irq_pmu_counter->pmu_2_irq_total;
+				// new_pmu_3_total = irq_pmu_counter->pmu_3_irq_total;
+			}
+			local_irq_restore(flags);
+
+			delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+			if (unlikely(new_csw != sk->sk_ts.last_csw)) {
+				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_APPLICATION_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				sk->sk_ts.application_irq_delta = delta_irqtime;
+			}
+
+			sk->sk_ts.last_irqtime = new_irqtime;
+			sk->sk_ts.last_csw = new_csw;
+
+			if (sysctl_net_latency_perstage_rdpmc_on) {
+				sk->sk_ts.app_pmu_0_delta = (new_pmu_0 - sk->sk_ts.last_pmu_0) - 
+							(new_pmu_0_total - sk->sk_ts.last_pmu_0_irq_total);
+				sk->sk_ts.app_pmu_1_delta = (new_pmu_1 - sk->sk_ts.last_pmu_1) - 
+							(new_pmu_1_total - sk->sk_ts.last_pmu_1_irq_total);
+				// sk->sk_ts.app_pmu_2_delta = (new_pmu_2 - sk->sk_ts.last_pmu_2) - 
+				// 			(new_pmu_2_total - sk->sk_ts.last_pmu_2_irq_total);
+				// sk->sk_ts.app_pmu_3_delta = (new_pmu_3 - sk->sk_ts.last_pmu_3) -
+				// 			(new_pmu_3_total - sk->sk_ts.last_pmu_3_irq_total);
+				sk->sk_ts.last_pmu_0 = new_pmu_0;
+				sk->sk_ts.last_pmu_1 = new_pmu_1;
+				// sk->sk_ts.last_pmu_2 = new_pmu_2;
+				// sk->sk_ts.last_pmu_3 = new_pmu_3;
+				sk->sk_ts.last_pmu_0_irq_total = new_pmu_0_total;
+				sk->sk_ts.last_pmu_1_irq_total = new_pmu_1_total;
+				// sk->sk_ts.last_pmu_2_irq_total = new_pmu_2_total;
+				// sk->sk_ts.last_pmu_3_irq_total = new_pmu_3_total;
+			}
+		} else
+#endif
+		{
+			sk->sk_ts.write_enter = ktime_get_real();
+		}
 	}
 #endif
 
@@ -2060,8 +2170,63 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	struct scm_timestamping_internal tss;
 	int cmsg_flags;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
+	int cpu;
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+	u64 delta_irqtime;
+	u64 new_irqtime;
+	u64 new_csw;
+	u64 new_pmu_0, new_pmu_1; //, new_pmu_2, new_pmu_3;
+	u64 new_pmu_0_total, new_pmu_1_total; //, new_pmu_2_total, new_pmu_3_total;
+	unsigned long irq_flags;
+#endif
+	int is_sampled = LATENCY_VALIDATION_SAMPLED(sk->sk_log_index, 
+						sysctl_net_latency_breakdown_log);
 	if (sysctl_net_latency_breakdown_on) {
-		sk->sk_ts.read_enter = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		if (sysctl_net_latency_breakdown_validation && is_sampled) {
+			local_irq_save(irq_flags);
+			sk->sk_ts.read_enter = ktime_get_real();
+			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nivcsw + current->nvcsw;
+			local_irq_restore(irq_flags);
+
+			delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+			// We need to reset all sock's timestamp fields and delta fields, but
+			// exclude rx_enter which we just set, and ready set by IRQ path.
+			sk->sk_ts.hidden_app_irq_delta = 0;
+			sk->sk_ts.sleep_prepare_irq_delta = 0;
+			sk->sk_ts.sleep_wake_up_irq_delta = 0;
+			sk->sk_ts.rx_data_copy_irq_delta = 0;
+			sk->sk_ts.application_irq_delta = 0;
+			sk->sk_ts.sleep_enter = 0;
+			sk->sk_ts.wake_up = 0;
+			sk->sk_ts.valid = 0;
+			if (sysctl_net_latency_perstage_rdpmc_on) {
+				// clean the results of per-stage PMU counters.
+				sk->sk_ts.app_pmu_0_delta = 0;
+				sk->sk_ts.app_pmu_1_delta = 0;
+				// sk->sk_ts.app_pmu_2_delta = 0;
+				// sk->sk_ts.app_pmu_3_delta = 0;
+				sk->sk_ts.rxc_pmu_0_delta = 0;
+				sk->sk_ts.rxc_pmu_1_delta = 0;
+				// sk->sk_ts.rxc_pmu_2_delta = 0;
+				// sk->sk_ts.rxc_pmu_3_delta = 0;
+			}
+
+			if (unlikely(new_csw != sk->sk_ts.last_csw)) {
+				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_HIDDEN_APP_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				sk->sk_ts.hidden_app_irq_delta = delta_irqtime;
+			}
+
+			sk->sk_ts.last_irqtime = new_irqtime;
+			sk->sk_ts.last_csw = new_csw;
+		} else
+#endif		
+		{
+			sk->sk_ts.read_enter = ktime_get_real();
+		}
 	}
 #endif
 
@@ -2199,19 +2364,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 			release_sock(sk);
 			lock_sock(sk);
 		} else {
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-			if (sysctl_net_latency_breakdown_on) {
-				sk->sk_ts.sleep_enter = ktime_get_real();
-			}
-#endif
-
 			sk_wait_data(sk, &timeo, last);
-
-#if IS_ENABLED(CONFIG_NET_LATENCY)
-			if (sysctl_net_latency_breakdown_on) {
-				sk->sk_ts.wake_up = ktime_get_real();
-			}
-#endif
 		}
 
 		if ((flags & MSG_PEEK) &&
@@ -2251,7 +2404,66 @@ found_ok_skb:
 		if (!(flags & MSG_TRUNC)) {
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 			if (sysctl_net_latency_breakdown_on) {
-				skb->rx_ts.data_copy = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+				/*
+				 * The case for rx data_copy timestamp is subtle: kernel may
+				 * enter found_ok_skb multiple times, thus snapshot different
+				 * timestamps, which will be correct for the final timestamp but
+				 * not for delta_irqtime and pmu_delta. With single io-depth the 
+				 * results will not be affected since one packet is one skb. 
+				 */
+				if (sysctl_net_latency_breakdown_validation && is_sampled) {
+					struct irq_pmu_counter *irq_pmu_counter = 
+											this_cpu_ptr(&irq_pmu_counter_cpu);
+					local_irq_save(irq_flags);
+					// Note: the old measurement write ts to skb rather than sk,
+					// and then move to sk. There is no need to do so, for per
+					// stage validation, we store information to sk directly.
+					skb->rx_ts.data_copy = ktime_get_real();
+					new_irqtime = public_irq_time_read(smp_processor_id());
+					new_csw = current->nvcsw + current->nivcsw;
+					if (sysctl_net_latency_perstage_rdpmc_on) {
+						LATENCY_FENCE();
+						new_pmu_0 = latency_rdpmc_nofence(0);
+						new_pmu_1 = latency_rdpmc_nofence(1);
+						// new_pmu_2 = latency_rdpmc_nofence(2);
+						// new_pmu_3 = latency_rdpmc_nofence(3);
+						new_pmu_0_total = irq_pmu_counter->pmu_0_irq_total;
+						new_pmu_1_total = irq_pmu_counter->pmu_1_irq_total;
+						// new_pmu_2_total = irq_pmu_counter->pmu_2_irq_total;
+						// new_pmu_3_total = irq_pmu_counter->pmu_3_irq_total;
+					}
+					local_irq_restore(irq_flags);
+
+					delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+					if (unlikely(new_csw != sk->sk_ts.last_csw)) {
+						LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_SLEEP_WAKE_UP_CSW_INVALID);
+					} else if (unlikely(delta_irqtime)) {
+						sk->sk_ts.sleep_wake_up_irq_delta = delta_irqtime;
+					}
+
+					sk->sk_ts.last_irqtime = new_irqtime;
+					sk->sk_ts.last_csw = new_csw;
+
+					// the initialization of last_pmu_* is independent of csw.
+					// Note we initialize the last_pmu* in sk->sk_ts, not skb.
+					if (sysctl_net_latency_perstage_rdpmc_on) {
+						sk->sk_ts.last_pmu_0 = new_pmu_0;
+						sk->sk_ts.last_pmu_1 = new_pmu_1;
+						// sk->sk_ts.last_pmu_2 = new_pmu_2;
+						// sk->sk_ts.last_pmu_3 = new_pmu_3;
+						sk->sk_ts.last_pmu_0_irq_total = new_pmu_0_total;
+						sk->sk_ts.last_pmu_1_irq_total = new_pmu_1_total;
+						// sk->sk_ts.last_pmu_2_irq_total = new_pmu_2_total;
+						// sk->sk_ts.last_pmu_3_irq_total = new_pmu_3_total;
+					}
+
+				} else
+#endif				
+				{
+					skb->rx_ts.data_copy = ktime_get_real();
+				}
 			}
 #endif
 
@@ -2268,9 +2480,9 @@ found_ok_skb:
 		copied += used;
 		len -= used;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
-                if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only &&
-			 inet_sk(sk)->inet_saddr == in_aton("192.168.11.125")) {
-                        struct qizhe_time_element *element;
+		if (sysctl_net_latency_breakdown_on && sysctl_net_latency_rx_sched_lat_only &&
+				inet_sk(sk)->inet_saddr == in_aton(LATENCY_MONITOR_SOURCE_IP)) {
+			struct qizhe_time_element *element;
 			struct list_head *ele_entry, *safe;
 			list_for_each_safe(ele_entry, safe, &tp->qizhe_time_queue) {
 				element = list_entry(ele_entry, struct qizhe_time_element, entry);
@@ -2278,12 +2490,17 @@ found_ok_skb:
 					printk("used:%lu element->size:%d %p", used, element->size, element);
 				} else {
 					element->size -= used;
-					if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0) { 
+					cpu = smp_processor_id();
+					if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0 &&
+						(cpu == 32 || cpu == 96)) { 
 						trace_printk("[latency-breakdown] source port: %u destination port: %u "
-                                                	"-- rx -rx_sched: %lld timestamp: %lld\n", be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport), be16_to_cpu(sk->sk_dport),
-                                                        ktime_get_real() - element->time, ktime_get());
- 
-					}	
+										"-- rx -rx_sched: %lld timestamp: %lld\n", 
+										be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport), 
+										be16_to_cpu(sk->sk_dport),
+										ktime_get_real() - element->time, ktime_get()
+									);
+
+					}
 				}
 				if(element->size == 0) {
 					list_del(&element->entry);
@@ -2291,7 +2508,7 @@ found_ok_skb:
 				}
 				break;
 			}
-                }
+		}
 #endif
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 		if (sysctl_net_latency_breakdown_on) {
@@ -2349,7 +2566,62 @@ found_fin_ok:
 
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	if (sysctl_net_latency_breakdown_on) {
-		sk->sk_ts.read_return = ktime_get_real();
+#if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
+		if (sysctl_net_latency_breakdown_validation && is_sampled) {
+			struct irq_pmu_counter *irq_pmu_counter = 
+											this_cpu_ptr(&irq_pmu_counter_cpu);
+			local_irq_save(irq_flags);
+			sk->sk_ts.read_return = ktime_get_real();
+			new_irqtime = public_irq_time_read(smp_processor_id());
+			new_csw = current->nvcsw + current->nivcsw;
+			if (sysctl_net_latency_perstage_rdpmc_on) {
+				LATENCY_FENCE();
+				new_pmu_0 = latency_rdpmc_nofence(0);
+				new_pmu_1 = latency_rdpmc_nofence(1);
+				// new_pmu_2 = latency_rdpmc_nofence(2);
+				// new_pmu_3 = latency_rdpmc_nofence(3);
+				new_pmu_0_total = irq_pmu_counter->pmu_0_irq_total;
+				new_pmu_1_total = irq_pmu_counter->pmu_1_irq_total;
+				// new_pmu_2_total = irq_pmu_counter->pmu_2_irq_total;
+				// new_pmu_3_total = irq_pmu_counter->pmu_3_irq_total;
+			}
+			local_irq_restore(irq_flags);
+
+			delta_irqtime = new_irqtime - sk->sk_ts.last_irqtime;
+
+			if (unlikely(new_csw != sk->sk_ts.last_csw)) {
+				LATENCY_STAGE_MARK_INVALID(sk->sk_ts.valid, STAGE_RX_DATA_COPY_CSW_INVALID);
+			} else if (unlikely(delta_irqtime)) {
+				sk->sk_ts.rx_data_copy_irq_delta = delta_irqtime;
+			}
+
+			sk->sk_ts.last_irqtime = new_irqtime;
+			sk->sk_ts.last_csw = new_csw;
+
+			// Note the update of last_pmu_* doesn't depend on csw validation.
+			if (sysctl_net_latency_perstage_rdpmc_on) {
+				sk->sk_ts.rxc_pmu_0_delta = (new_pmu_0 - sk->sk_ts.last_pmu_0) -
+							(new_pmu_0_total - sk->sk_ts.last_pmu_0_irq_total);
+				sk->sk_ts.rxc_pmu_1_delta = (new_pmu_1 - sk->sk_ts.last_pmu_1) -
+							(new_pmu_1_total - sk->sk_ts.last_pmu_1_irq_total);
+				// sk->sk_ts.rxc_pmu_2_delta = (new_pmu_2 - sk->sk_ts.last_pmu_2) -
+				// 			(new_pmu_2_total - sk->sk_ts.last_pmu_2_irq_total);
+				// sk->sk_ts.rxc_pmu_3_delta = (new_pmu_3 - sk->sk_ts.last_pmu_3) -
+				// 			(new_pmu_3_total - sk->sk_ts.last_pmu_3_irq_total);
+				sk->sk_ts.last_pmu_0 = new_pmu_0;
+				sk->sk_ts.last_pmu_1 = new_pmu_1;
+				// sk->sk_ts.last_pmu_2 = new_pmu_2;
+				// sk->sk_ts.last_pmu_3 = new_pmu_3;
+				sk->sk_ts.last_pmu_0_irq_total = new_pmu_0_total;
+				sk->sk_ts.last_pmu_1_irq_total = new_pmu_1_total;
+				// sk->sk_ts.last_pmu_2_irq_total = new_pmu_2_total;
+				// sk->sk_ts.last_pmu_3_irq_total = new_pmu_3_total;
+			}
+		} else 
+#endif
+		{
+			sk->sk_ts.read_return = ktime_get_real();
+		}
 	}
 #endif
 

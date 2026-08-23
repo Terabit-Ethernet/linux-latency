@@ -27,6 +27,12 @@
 #include "pelt.h"
 #include "smp.h"
 
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+#include <netian/sysray_sched.h>
+#include <linux/percpu.h>
+DEFINE_PER_CPU(struct sysray_sched_info, sysray_sched_percpu);
+EXPORT_SYMBOL(sysray_sched_percpu);
+#endif
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
  * associated with them) to allow external modules to probe them.
@@ -45,6 +51,10 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(sched_update_nr_running_tp);
 static int accu_irq_accounting __read_mostly;
 module_param(accu_irq_accounting, int, 0644);
 MODULE_PARM_DESC(accu_irq_accounting, "accurate irq accounting");
+
+static int scheduler_accounting __read_mostly;
+module_param(scheduler_accounting, int, 0644);
+MODULE_PARM_DESC(scheduler_accounting, "scheduler accounting");
 
 DEFINE_PER_CPU_SHARED_ALIGNED(struct rq, runqueues);
 
@@ -3587,6 +3597,13 @@ static struct rq *finish_task_switch(struct task_struct *prev)
 	struct mm_struct *mm = rq->prev_mm;
 	long prev_state;
 
+	if (scheduler_accounting) {
+		if (current->sched_class == &fair_sched_class) {
+			update_rq_clock(rq);
+			current->se.exec_start = rq_clock_task(rq);
+		}
+	}
+
 	/*
 	 * The previous task will have left us with a preempt_count of 2
 	 * because it left us after:
@@ -4420,7 +4437,10 @@ static void __sched notrace __schedule(bool preempt)
 	struct rq_flags rf;
 	struct rq *rq;
 	int cpu;
-
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	struct sysray_sched_info *sinfo;
+	sinfo = this_cpu_ptr(&sysray_sched_percpu);
+#endif
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
 	prev = rq->curr;
@@ -4454,6 +4474,12 @@ static void __sched notrace __schedule(bool preempt)
 	/* Promote REQ to ACT */
 	rq->clock_update_flags <<= 1;
 	update_rq_clock(rq);
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	sinfo->sched_rq_clock_start = rq_clock(rq);
+	sinfo->sched_rq_clock_task_start = rq_clock_task(rq);
+	sinfo->sched_rq_clock_update_flags = rq->clock_update_flags;
+	sinfo->sched_enter = sched_clock_cpu(cpu);
+#endif
 
 	switch_count = &prev->nivcsw;
 
@@ -4465,6 +4491,9 @@ static void __sched notrace __schedule(bool preempt)
 	 *  - ptrace_{,un}freeze_traced() can change ->state underneath us.
 	 */
 	prev_state = prev->state;
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	sinfo->sched_preempted = !preempt && prev_state;
+#endif
 	if (!preempt && prev_state) {
 		if (signal_pending_state(prev_state, prev)) {
 			prev->state = TASK_RUNNING;
@@ -4529,14 +4558,32 @@ static void __sched notrace __schedule(bool preempt)
 
 		trace_sched_switch(preempt, prev, next);
 
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+		sinfo->sched_middle = sched_clock_cpu(cpu);
+#endif
 		/* Also unlocks the rq: */
 		rq = context_switch(rq, prev, next, &rf);
 	} else {
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+		sinfo->sched_middle = sched_clock_cpu(cpu);
+#endif
+		if (scheduler_accounting) {
+			if (prev->sched_class == &fair_sched_class) {
+				update_rq_clock(rq);
+				prev->se.exec_start = rq_clock_task(rq);
+			}
+        }
+
 		rq->clock_update_flags &= ~(RQCF_ACT_SKIP|RQCF_REQ_SKIP);
 		rq_unlock_irq(rq, &rf);
 	}
 
 	balance_callback(rq);
+#ifdef CONFIG_SYSRAY_SCHED_INSTR
+	sinfo->sched_rq_clock_end = READ_ONCE(rq->clock);
+	sinfo->sched_rq_clock_task_end = READ_ONCE(rq->clock_task);
+	sinfo->sched_exit = sched_clock_cpu(cpu);
+#endif
 }
 
 void __noreturn do_task_dead(void)
