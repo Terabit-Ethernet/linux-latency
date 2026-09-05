@@ -391,11 +391,11 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 	bool send_doorbell;
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	struct sock *sk;
+	int cpu;
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 	u64 delta_irqtime;
 	u64 new_irqtime;
 	u64 new_csw;
-	int cpu;
 	unsigned long flags;
 #endif
 #endif
