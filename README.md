@@ -133,15 +133,13 @@ Compile as your normal user; only the install steps need root.
 ```shell
 make -j"$(nproc)" bzImage
 make -j"$(nproc)" modules
-sudo make modules_install
-sudo make install
+sudo make -j"$(nproc)" modules_install
+sudo make -j"$(nproc)" install
 ```
 
 ### X. Boot into the new kernel
 
-On Ubuntu, `make install` already regenerates the initramfs and GRUB menu; the explicit
-`update-grub` below is just a safety net. Confirm the menu entry title before selecting it,
-since it must match character for character.
+Confirm the menu entry title before selecting the new kernel to reboot, since it must match character for character.
 
 ```shell
 ver=$(make -s kernelrelease)
