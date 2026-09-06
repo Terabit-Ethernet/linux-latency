@@ -435,8 +435,8 @@ mlx5e_txwqe_complete(struct mlx5e_txqsq *sq, struct sk_buff *skb,
 #if IS_ENABLED(CONFIG_NET_LATENCY)
 	sk = skb->sk;
 	cpu = smp_processor_id();
-	if (sysctl_net_latency_breakdown_on && skb->sport && (cpu == 32 || cpu == 96)) {
-		// only sample packets on cpu 32 and 96 for now
+	if (sysctl_net_latency_breakdown_on && skb->sport && (cpu == 1 || cpu == 73)) {
+		// only sample packets on cpu 1 and 73 for now
 #if IS_ENABLED(CONFIG_IRQ_TIME_ACCOUNTING)
 		if (sysctl_net_latency_breakdown_validation) {
 			local_irq_save(flags);
