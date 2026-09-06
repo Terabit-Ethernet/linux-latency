@@ -30,6 +30,40 @@ For the experiment setup, workloads, and measurement scripts, see
 Build a **separate kernel image for each machine**. The latency monitor is keyed to the
 > host's own IP address, which is hardcoded at compile time (see [step 6](#6-set-the-latency-monitor-source-ip)).
 
+## Accurate IRQ Time Accounting (ACCa)
+
+Under Linux's CFS scheduler, scheduling-related events may invoke `update_rq_clock_task()` to update the CPU time attributed to the currently running task.
+
+With Linux's built-in IRQ time accounting (`CONFIG_IRQ_TIME_ACCOUNTING`), time spent handling interrupts is subtracted from task execution time when IRQ accounting is updated. However, `update_rq_clock_task()` may also be invoked while a softIRQ is still being processed. For example, one possible call path is:
+
+```plain
+__do_softirq
+  -> net_rx_action
+  -> __netif_receive_skb
+  -> ...
+  -> try_to_wake_up
+  -> ttwu_queue
+  -> update_rq_clock
+  -> update_rq_clock_task
+```
+
+In this case, the scheduler may update a task's CPU-time accounting before the ongoing softIRQ time has been accounted for. As a result, part of the softIRQ execution time can be incorrectly attributed to the task, as we stated in our paper.
+
+To avoid this misattribution, ACCa updates IRQ accounting immediately before `update_rq_clock_task()` accounts task execution time whenever the CPU is currently serving a hard IRQ or a softIRQ:
+
+```c
+if (accu_irq_accounting) {
+    if (hardirq_count() ||
+        (in_serving_softirq() && current != this_cpu_ksoftirqd()))
+        irqtime_account_irq(current);
+}
+```
+
+The `hardirq_count()` and `in_serving_softirq()` helper functions may differ in newer kernel versions. When porting ACCa to a more recent kernel, use the corresponding up-to-date helpers to determine whether execution is currently in hardIRQ or softIRQ context. 
+
+The `current != this_cpu_ksoftirqd()` check excludes softIRQ processing performed by `ksoftirqd`, because in that case the interrupt-processing time is already executed in the context of the `ksoftirqd` kernel thread and should be charged to that thread normally.
+
+
 ## Installation
 
 ### I. Clean the tree
