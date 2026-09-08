@@ -2492,7 +2492,7 @@ found_ok_skb:
 					element->size -= used;
 					cpu = smp_processor_id();
 					if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0 &&
-						(cpu == 32 || cpu == 96)) { 
+						(cpu == 1 || cpu == 73)) { 
 						trace_printk("[latency-breakdown] source port: %u destination port: %u "
 										"-- rx -rx_sched: %lld timestamp: %lld\n", 
 										be16_to_cpu(tp->inet_conn.icsk_inet.inet_sport), 
