@@ -146,6 +146,12 @@ In `mlx5e_txwqe_complete()`, locate the following condition and replace 1 and 73
 if (sysctl_net_latency_breakdown_on && skb->sport && (cpu == 1 || cpu == 73))
 ```
 
+Another CPU filter is in `net/ipv4/tcp.c`. In `tcp_recvmsg`, locate the following condition and replace 1 and 73 as needed:
+```c
+if (sk->sk_log_index++ % sysctl_net_latency_breakdown_log == 0 &&
+    (cpu == 1 || cpu == 73)) { 
+```
+
 ### VIII. Remove any previous build with the same release name
 
 Skip this the first time you build. If you are rebuilding with the same `CONFIG_LOCALVERSION`
